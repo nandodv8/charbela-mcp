@@ -38,6 +38,7 @@ if [ -z "$NODE_BIN" ]; then
 fi
 
 NODE_BIN="$(cd "$(dirname "$NODE_BIN")" && pwd)/$(basename "$NODE_BIN")"
+export PATH="$(dirname "$NODE_BIN"):$PATH"
 NODE_VER="$("$NODE_BIN" -v 2>/dev/null || echo "?")"
 MAJOR="$(printf "%s" "$NODE_VER" | sed -n 's/^v\([0-9]\{1,\}\).*/\1/p')"
 

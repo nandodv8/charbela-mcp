@@ -28,6 +28,7 @@ if [ -z "$NODE_BIN" ]; then
   exit 1
 fi
 
+export PATH="$(dirname "$NODE_BIN"):$PATH"
 echo "  ✅ Node.js detectado: $("$NODE_BIN" -v)"
 echo
 
@@ -36,7 +37,9 @@ DEST="$HOME/Documents/charbela-mcp"
 echo "📥 [2/4] Descargando/Actualizando asistente en Documentos..."
 if [ -d "$DEST/.git" ]; then
   cd "$DEST"
-  git pull --quiet || true
+  git fetch origin main --quiet 2>/dev/null || true
+  git reset --hard origin/main --quiet 2>/dev/null || git pull --quiet || true
+  git clean -fd --quiet 2>/dev/null || true
 else
   mkdir -p "$HOME/Documents"
   rm -rf "$DEST"
