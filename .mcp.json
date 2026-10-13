@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "charbela-crm": {
+      "type": "sse",
+      "url": "https://charbela-mcp-775456671841.us-central1.run.app/sse",
+      "headers": {
+        "X-Charbela-Key": "charbela_crm_mcp_2026_sec_key"
+      }
+    }
+  }
+}
