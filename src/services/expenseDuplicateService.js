@@ -242,12 +242,31 @@ export async function detectDuplicateExpenses({ mes, toleranciaDias = 0 } = {}) 
     return sum + grp.duplicadosParaEliminar.reduce((s, d) => s + parseFloat(d.monto), 0);
   }, 0);
 
+  const tarjetaParaCopiar = totalDuplicadosEliminables > 0
+    ? [
+        `📌 **Mensaje para Fernando (puedes copiarle esto):**`,
+        `> Hola Fer, corrí la auditoría de duplicados en el CRM para ${mes || "los últimos movimientos"}:`,
+        `> • Se detectaron ${totalDuplicadosEliminables} posibles gastos duplicados que suman $${totalMontoDuplicado.toFixed(2)}.`,
+        `> • La nómina y los pagos recurrentes de choferes quedaron protegidos para no borrar pagos reales.`,
+        `> ¿Me confirmas si los elimino en lote con la herramienta de limpieza del CRM?`
+      ].join("\n")
+    : "";
+
+  const observacionesParaFernando = {
+    requiereAtencionFernando: totalDuplicadosEliminables > 0,
+    resumen: totalDuplicadosEliminables > 0
+      ? `${totalDuplicadosEliminables} duplicados confirmados por $${totalMontoDuplicado.toFixed(2)}.`
+      : "Sin duplicados. Nómina y egresos limpios.",
+    tarjetaParaCopiar
+  };
+
   return {
     periodoAuditado: mes || "Últimos movimientos",
     totalGruposConDuplicados: gruposDuplicados.length,
     totalRegistrosDuplicadosParaEliminar: totalDuplicadosEliminables,
     montoTotalInfladoPorDuplicados: totalMontoDuplicado.toFixed(2),
     grupos: gruposDuplicados,
+    observacionesParaFernando,
     mensaje: totalDuplicadosEliminables > 0
       ? `⚠️ Se detectaron ${totalDuplicadosEliminables} gastos duplicados confirmados que están inflando los egresos en $${totalMontoDuplicado.toFixed(2)}.`
       : "✅ No se encontraron gastos duplicados en el periodo auditado. La nómina y los pagos recurrentes están protegidos y la contabilidad está limpia."

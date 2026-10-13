@@ -433,9 +433,30 @@ export async function getExpensesWithoutReceipts({ limite = 15 } = {}) {
     if (sinComprobante.length >= limite) break;
   }
 
+  const gastosPesados = sinComprobante.filter(g => parseFloat(g.monto) >= 50);
+  const totalPesado = gastosPesados.reduce((s, g) => s + parseFloat(g.monto), 0);
+
+  const tarjetaParaCopiar = gastosPesados.length > 0
+    ? [
+        `📌 **Mensaje para Fernando (puedes copiarle esto):**`,
+        `> Hola Fer, en la auditoría de comprobantes del CRM encontré ${sinComprobante.length} gastos sin sustento.`,
+        `> • Hay ${gastosPesados.length} gastos mayores a $50 que suman $${totalPesado.toFixed(2)} (ej. ${gastosPesados.slice(0, 3).map(g => `${g.proveedor}: $${g.monto}`).join(", ")}).`,
+        `> Para efectos del SRI, estos gastos no son deducibles sin comprobante autorizado. ¿Me ayudas revisando cuáles se pueden solicitar o cargar?`
+      ].join("\n")
+    : "";
+
+  const observacionesParaFernando = {
+    requiereAtencionFernando: gastosPesados.length > 0,
+    resumen: gastosPesados.length > 0
+      ? `${gastosPesados.length} gastos significativos sin comprobante por $${totalPesado.toFixed(2)}.`
+      : "No hay gastos de alto monto pendientes de comprobante.",
+    tarjetaParaCopiar
+  };
+
   return {
     totalGastosSinComprobante: sinComprobante.length,
     gastos: sinComprobante,
+    observacionesParaFernando,
     mensaje: sinComprobante.length > 0
       ? `Hay ${sinComprobante.length} gastos registrados recientemente que aún no tienen comprobante o número de autorización asociado.`
       : "¡Excelente! Todos los gastos recientes tienen su comprobante o referencia bancaria registrada."

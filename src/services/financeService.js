@@ -318,8 +318,153 @@ export async function getFinancialSummaryConversational({ fechaInicio, fechaFin,
   const totalCxC = cxcPendientes.reduce((sum, c) => sum + parseFloat(c.saldo), 0);
   const totalCxP = cxpPendientes.reduce((sum, c) => sum + parseFloat(c.montoPendiente), 0);
 
+  // 5. Análisis Proactivo de Mejoras y Alertas para Fernando
+  const hallazgos = [];
+  const lineasParaCopiar = [];
+
+  // A. Cuotas de Préstamo / Hipotecarias en OPEX o Servicios
+  const cuotasHipotecas = [];
+  for (const g of gastosDocs) {
+    const desc = (g.descripcion || "").toLowerCase();
+    const prov = (g.proveedor || g.proveedorNombre || "").toLowerCase();
+    const cat = (g.categoria || "").toLowerCase();
+    const notas = (g.notas || g.nota || "").toLowerCase();
+    const combined = `${desc} ${prov} ${cat} ${notas}`;
+
+    const esCuotaBancaria =
+      combined.includes("hipoteca") || combined.includes("hipotecario") ||
+      combined.includes("prestamo") || combined.includes("préstamo") ||
+      combined.includes("credito") || combined.includes("crédito") ||
+      (combined.includes("cuota") && (combined.includes("banco") || combined.includes("pichincha") || combined.includes("guayaquil") || combined.includes("biess") || combined.includes("cfn")));
+
+    if (esCuotaBancaria) {
+      cuotasHipotecas.push({
+        id: g.id,
+        monto: parseFloat(g.monto || 0),
+        descripcion: g.descripcion || "Cuota o préstamo",
+        categoria: g.categoria || "Servicios",
+        proveedor: g.proveedor || g.proveedorNombre || "Banco",
+        fecha: normalizeEcuadorDate(g.fechaEmision || g.fechaPago || g.createdAt)
+      });
+    }
+  }
+
+  if (cuotasHipotecas.length > 0) {
+    const totalCuotas = cuotasHipotecas.reduce((s, c) => s + c.monto, 0);
+    hallazgos.push({
+      tipo: "clasificacion_contable",
+      prioridad: "alta",
+      titulo: "Cuota de préstamo / hipotecario registrada como OPEX puro",
+      detalle: `Se detectaron $${totalCuotas.toFixed(2)} (${cuotasHipotecas.map(c => `#${c.id.substring(0, 6)}: $${c.monto.toFixed(2)} en '${c.categoria}'`).join(", ")}). Una cuota bancaria debe desglosarse en INTERÉS (gasto deducible) y CAPITAL (amortización de pasivo que no es gasto). Al registrarla completa como gasto operativo, se exagera la pérdida y se pierde deducibilidad limpia ante el SRI.`,
+      accionSugerida: "Desglosar la cuota entre interés y amortización de capital en el CRM para no abultar el déficit contable."
+    });
+    lineasParaCopiar.push(`🏦 *Hipotecario/Préstamo:* Hay $${totalCuotas.toFixed(2)} registrado como gasto completo en OPEX. Conviene separar la cuota en interés (gasto) y amortización de capital en el CRM para no inflar la pérdida de ${targetMes}.`);
+  }
+
+  // B. Detección de COGS atípicamente bajo (< 20%)
+  if (totalIngresosDevengado > 500) {
+    const cogsPct = (totalCOGS / totalIngresosDevengado) * 100;
+    if (cogsPct < 20) {
+      hallazgos.push({
+        tipo: "costo_de_ventas",
+        prioridad: "media",
+        titulo: `COGS atípicamente bajo (${cogsPct.toFixed(1)}% vs rango normal 25%-35%)`,
+        detalle: `En pastelería artesanal, el costo directo de materia prima suele oscilar entre 25% y 35%. Un COGS de ${cogsPct.toFixed(1)}% sugiere compras pendientes de registrar o empaques/cajas ingresados como OPEX.`,
+        accionSugerida: "Revisar facturas de insumos pendientes o reclasificar cajas/empaques a Costo Directo."
+      });
+      lineasParaCopiar.push(`🎂 *COGS Bajo (${cogsPct.toFixed(1)}%):* La materia prima está baja frente a lo usual en pastelería (25-35%). Puede que falten facturas por cargar o que las cajas/empaques deban reclasificarse a costo directo.`);
+    }
+  }
+
+  // C. Detección de empaques/cajas en Gastos de Operación
+  let totalEmpaquesEnOpex = 0;
+  const empaquesList = [];
+  for (const g of gastosDocs) {
+    const desc = (g.descripcion || "").toLowerCase();
+    const prov = (g.proveedor || g.proveedorNombre || "").toLowerCase();
+    const cat = (g.categoria || "").toLowerCase();
+    if (cat.includes("operacion") || cat.includes("operación") || cat.includes("servicios")) {
+      if (desc.includes("caja") || desc.includes("carton") || desc.includes("cartón") || desc.includes("blonda") || desc.includes("empaque") || prov.includes("cartones del pacifico")) {
+        const m = parseFloat(g.monto || 0);
+        totalEmpaquesEnOpex += m;
+        empaquesList.push(`${g.descripcion || prov} ($${m.toFixed(2)})`);
+      }
+    }
+  }
+  if (totalEmpaquesEnOpex > 0) {
+    hallazgos.push({
+      tipo: "reclasificacion_empaques",
+      prioridad: "baja",
+      titulo: `Cajas y empaques en Gastos de Operación ($${totalEmpaquesEnOpex.toFixed(2)})`,
+      detalle: `Se detectaron ${empaquesList.join(", ")} en Gastos de Operación. Como se consumen directamente con cada torta vendida, pertenecen a Costo Directo (COGS).`,
+      accionSugerida: "Reclasificar empaques a Costo Directo para que el margen bruto de pastelería sea preciso."
+    });
+  }
+
+  // D. Detección de gastos significativos sin comprobante (SRI)
+  const gastosGrandesSinComprobante = [];
+  for (const g of gastosDocs) {
+    const m = parseFloat(g.monto || 0);
+    const tieneSustento = Boolean(g.facturaUrl || g.comprobanteUrl || g.referenciaBancaria || g.autorizacionSRI);
+    if (m >= 50 && !tieneSustento) {
+      gastosGrandesSinComprobante.push({
+        id: g.id,
+        monto: m,
+        proveedor: g.proveedor || g.proveedorNombre || "No indicado",
+        descripcion: g.descripcion || "",
+        fecha: normalizeEcuadorDate(g.fechaEmision || g.fechaPago || g.createdAt)
+      });
+    }
+  }
+  if (gastosGrandesSinComprobante.length > 0) {
+    const totalSinSustento = gastosGrandesSinComprobante.reduce((s, g) => s + g.monto, 0);
+    const listaNombres = gastosGrandesSinComprobante.slice(0, 4).map(g => `${g.proveedor}: $${g.monto.toFixed(2)}`).join(", ");
+    hallazgos.push({
+      tipo: "tributario_sri",
+      prioridad: "alta",
+      titulo: `${gastosGrandesSinComprobante.length} gastos significativos sin comprobante ($${totalSinSustento.toFixed(2)})`,
+      detalle: `Para el SRI ecuatoriano, los gastos sin factura autorizada con RUC pierden deducibilidad de Impuesto a la Renta. Egresos grandes sin soporte: ${listaNombres}.`,
+      accionSugerida: "Solicitar facturas a proveedores o subir comprobantes para asegurar deducibilidad."
+    });
+    lineasParaCopiar.push(`🧾 *Sustento SRI:* Hay ${gastosGrandesSinComprobante.length} gastos fuertes por $${totalSinSustento.toFixed(2)} sin comprobante (${listaNombres}). Se está perdiendo base deducible ante el SRI.`);
+  }
+
+  // E. Déficit contable vs flujo real
+  if (utilidadNeta < 0 && flujoCajaNeto >= 0) {
+    lineasParaCopiar.push(`📊 *Déficit vs Caja:* En papel hay déficit contable de $${Math.abs(utilidadNeta).toFixed(2)}, pero la caja operativa tuvo superávit de $${flujoCajaNeto.toFixed(2)}. Es una discrepancia por cuotas bancarias o compras temporales.`);
+  }
+
+  // Generar bloque listo para enviar
+  let tarjetaParaCopiar = "";
+  if (lineasParaCopiar.length > 0) {
+    tarjetaParaCopiar = [
+      `📌 **Mensaje para Fernando (puedes copiarle esto):**`,
+      `> Hola Fer, al revisar el CRM con el asistente salieron estos puntos técnicos/contables del mes de ${targetMes}:`,
+      ...lineasParaCopiar.map(l => `> • ${l}`),
+      `> ¿Me ayudas revisando cómo ajustarlo en el CRM o en las reglas del sistema?`
+    ].join("\n");
+  }
+
+  const observacionesParaFernando = {
+    requiereAtencionFernando: hallazgos.length > 0,
+    totalAlertas: hallazgos.length,
+    resumen: hallazgos.length > 0
+      ? `Se detectaron ${hallazgos.length} alertas contables o de configuración técnica que convendría que Fernando revise.`
+      : "No se detectaron anomalías contables ni de configuración en este periodo.",
+    tarjetaParaCopiar,
+    items: hallazgos
+  };
+
   return {
     periodo: targetMes,
+    resumenEjecutivo: {
+      totalVentasContratadas: totalIngresosDevengado.toFixed(2),
+      totalDineroCobradoEnCaja: totalCobradoMes.toFixed(2),
+      totalGastosEgresos: totalEgresosMes.toFixed(2),
+      flujoDeCajaNeto: flujoCajaNeto.toFixed(2),
+      utilidadNetaDevengada: utilidadNeta.toFixed(2),
+      margenNetoPorcentaje: `${margenNetoPct}%`
+    },
     criterioDevengado: {
       ingresosTotalesFacturados: totalIngresosDevengado.toFixed(2),
       cogsCostoDeVentas: totalCOGS.toFixed(2),
@@ -341,6 +486,7 @@ export async function getFinancialSummaryConversational({ fechaInicio, fechaFin,
       cuentasPorPagarProveedoresCxP: totalCxP.toFixed(2),
       ivaAcreditableSoportado: totalIvaAcreditable.toFixed(2)
     },
+    observacionesParaFernando,
     desgloseGastosPorCategoria: Object.entries(gastosPorCategoria).map(([categoria, monto]) => ({
       categoria,
       clasificacion: isCogs(categoria) ? "COGS (Directo)" : "OPEX (Operativo)",

@@ -260,7 +260,7 @@ async function buildFullOrderReport(p) {
       direccion: p.direccionEntrega || "Retiro en local"
     },
     entrega: {
-      fecha: toDateStr(p.fechaEnvio || p.createdAt),
+      fecha: normalizeEcuadorDate(p.fechaEnvio || p.createdAt),
       hora: p.horaEntrega || p.hora || "No especificada",
       metodo: p.metodoEntrega || (p.costoDelivery > 0 ? "Entrega a Domicilio" : "Retiro en Obrador"),
       chofer: p.choferNombre || "No asignado",
