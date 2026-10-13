@@ -4,7 +4,7 @@
 $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$indexPath = Join-Path $scriptDir "src\index.js"
+$indexPath = Join-Path $scriptDir "src\bridge.js"
 
 $claudeDir = Join-Path $env:APPDATA "Claude"
 $configFile = Join-Path $claudeDir "claude_desktop_config.json"
