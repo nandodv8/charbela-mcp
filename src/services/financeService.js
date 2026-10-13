@@ -347,9 +347,9 @@ export async function getFinancialSummaryConversational({ fechaInicio, fechaFin,
       monto: monto.toFixed(2),
       porcentajeDelGasto: totalEgresosMes > 0 ? `${((monto / totalEgresosMes) * 100).toFixed(1)}%` : "0%"
     })),
-    clientesPendientesDePagoCxC: cxcPendientes.slice(0, 10),
-    cuentasPorPagarCxP: cxpPendientes.slice(0, 10),
-    ultimosGastosRegistrados: listaGastos.slice(0, 8)
+    clientesPendientesDePagoCxC: cxcPendientes.slice(0, 25),
+    cuentasPorPagarCxP: cxpPendientes.slice(0, 25),
+    ultimosGastosRegistrados: listaGastos.slice(0, 25)
   };
 }
 

@@ -84,8 +84,28 @@ export function inferCategoryFromText(text = "") {
     return "Comisiones bancarias";
   }
 
-  // Renta
-  if (t.includes("alquiler") || t.includes("arriendo") || t.includes("renta")) {
+  // Nómina y Sueldos
+  if (
+    t.includes("sueldo") || t.includes("salario") || t.includes("quincena") ||
+    t.includes("liquidaci") || t.includes("iess") || t.includes("nomina") || t.includes("nómina")
+  ) {
+    return "Nómina";
+  }
+
+  // Marketing y Publicidad
+  if (
+    t.includes("facebook") || t.includes("meta") || t.includes("instagram") ||
+    t.includes("publicidad") || t.includes("marketing") || t.includes("pauta") ||
+    t.includes("ramiro") || t.includes("redes")
+  ) {
+    return "Marketing";
+  }
+
+  // Renta y Cuota de Inmueble (Taller)
+  if (
+    t.includes("alquiler") || t.includes("arriendo") || t.includes("renta") ||
+    t.includes("hipoteca") || t.includes("hipotecario") || t.includes("local")
+  ) {
     return "Renta";
   }
 

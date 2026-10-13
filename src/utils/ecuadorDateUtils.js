@@ -120,3 +120,29 @@ export function diffDays(dateA, dateB) {
   const t2 = Date.UTC(y2, m2 - 1, d2);
   return Math.abs(Math.round((t1 - t2) / 86400000));
 }
+
+/**
+ * Formatea un Timestamp o Date a 'YYYY-MM-DD HH:mm:ss' en hora de Ecuador.
+ */
+export function formatEcuadorDateTime(input) {
+  if (!input) return "";
+  let dateObj = null;
+  if (input.toDate && typeof input.toDate === "function") dateObj = input.toDate();
+  else if (input.seconds && typeof input.seconds === "number") dateObj = new Date(input.seconds * 1000);
+  else if (input instanceof Date) dateObj = input;
+  else {
+    try { dateObj = new Date(input); } catch (_) {}
+  }
+  if (!dateObj || isNaN(dateObj.getTime())) return "";
+
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: ECUADOR_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  }).format(dateObj).replace(",", "");
+}

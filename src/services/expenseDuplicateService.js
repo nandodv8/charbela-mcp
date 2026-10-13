@@ -1,5 +1,5 @@
 // crm-charbela/mcp-server/src/services/expenseDuplicateService.js
-// Auditoría de Gastos Duplicados, Limpieza y Modificación Quirúrgica
+// Auditoría de Gastos Duplicados, Limpieza, Modificación Quirúrgica y Exploración
 // Creado bajo los lineamientos de Controller (Dana) y Backend Architect
 
 import { db } from "../firebase.js";
@@ -17,37 +17,79 @@ import {
 } from "firebase/firestore";
 import {
   normalizeEcuadorDate,
+  getEcuadorToday,
   getEcuadorMesContable,
+  formatEcuadorDateTime,
   diffDays
 } from "../utils/ecuadorDateUtils.js";
 
 /**
- * DETECTAR GASTOS DUPLICADOS EN EL CRM
- * Identifica registros repetidos por referencia bancaria idéntica o por coincidencia de monto + fecha cercana.
+ * Extrae el beneficiario o persona mencionada en el proveedor o descripción.
  */
-export async function detectDuplicateExpenses({ mes, toleranciaDias = 1 } = {}) {
+function extractPersonName(text = "") {
+  const clean = text.toLowerCase();
+  const known = [
+    "charbela", "giovanna", "gladys", "robinson", "ramiro",
+    "carlos", "andrea", "maria", "maría", "pedro", "luis"
+  ];
+  for (const name of known) {
+    if (clean.includes(name)) return name;
+  }
+  return "";
+}
+
+/**
+ * Determina si la categoría corresponde a nómina o pago de personal.
+ */
+function isPayrollCategory(categoria = "") {
+  const c = categoria.toLowerCase();
+  return c.includes("nómina") || c.includes("nomina") || c.includes("mano de obra");
+}
+
+/**
+ * Determina si corresponde a flete, chofer o transporte recurrente.
+ */
+function isTransportExpense(categoria = "", descripcion = "") {
+  const c = categoria.toLowerCase();
+  const d = descripcion.toLowerCase();
+  return c.includes("transporte") || c.includes("logistica") || c.includes("logística") ||
+         d.includes("chofer") || d.includes("carrera") || d.includes("flete") || d.includes("delivery");
+}
+
+/**
+ * DETECTAR GASTOS DUPLICADOS EN EL CRM
+ * Protección total contra falsos positivos en nómina, empleados y pagos recurrentes de choferes.
+ */
+export async function detectDuplicateExpenses({ mes, toleranciaDias = 0 } = {}) {
   let q;
   if (mes) {
     const cleanMes = mes.trim().substring(0, 7);
     q = query(collection(db, "gastos"), where("mesContable", "==", cleanMes));
   } else {
-    // Si no se especifica mes, revisar los últimos 250 gastos
-    q = query(collection(db, "gastos"), limit(250));
+    // Si no se especifica mes, revisar los últimos 300 gastos
+    q = query(collection(db, "gastos"), limit(300));
   }
 
   const snap = await getDocs(q);
   const gastos = snap.docs.map(d => {
     const data = d.data();
     const fecha = normalizeEcuadorDate(data.fechaEmision || data.fechaPago || data.createdAt);
+    const createdAtEcuador = formatEcuadorDateTime(data.createdAt);
+    const prov = (data.proveedor || data.proveedorNombre || "").trim();
+    const desc = (data.descripcion || "").trim();
+    const cat = data.categoria || "Otros";
+    const ref = (data.referenciaBancaria || "").trim();
+
     return {
       id: d.id,
       ...data,
       monto: parseFloat(data.monto || 0),
       fecha,
-      proveedor: (data.proveedor || data.proveedorNombre || "").trim(),
-      descripcion: (data.descripcion || "").trim(),
-      categoria: data.categoria || "Otros",
-      referenciaBancaria: (data.referenciaBancaria || "").trim(),
+      createdAtEcuador,
+      proveedor: prov,
+      descripcion: desc,
+      categoria: cat,
+      referenciaBancaria: ref,
       tieneComprobante: Boolean(data.facturaUrl || data.comprobanteUrl)
     };
   });
@@ -67,35 +109,85 @@ export async function detectDuplicateExpenses({ mes, toleranciaDias = 1 } = {}) 
 
       let esDuplicado = false;
       let razon = "";
+      let confianza = "alta";
 
-      // Criterio 1: Misma referencia bancaria no vacía
-      if (g1.referenciaBancaria && g2.referenciaBancaria &&
-          g1.referenciaBancaria.toLowerCase() === g2.referenciaBancaria.toLowerCase()) {
+      const ref1 = g1.referenciaBancaria.toLowerCase();
+      const ref2 = g2.referenciaBancaria.toLowerCase();
+      const hasValidRef1 = ref1.length >= 4 && !ref1.includes("sin") && !ref1.includes("n/a");
+      const hasValidRef2 = ref2.length >= 4 && !ref2.includes("sin") && !ref2.includes("n/a");
+
+      // Criterio 1: Misma referencia bancaria válida no vacía (Certero al 100%)
+      if (hasValidRef1 && hasValidRef2 && ref1 === ref2) {
         esDuplicado = true;
         razon = `Misma referencia bancaria (#${g1.referenciaBancaria})`;
-      }
+        confianza = "alta";
+      } else {
+        // Criterio 2: Coincidencia heurística con filtros anti falsos positivos
+        const diffMonto = Math.abs(g1.monto - g2.monto);
+        if (diffMonto < 0.01) {
+          const dias = diffDays(g1.fecha, g2.fecha);
+          const person1 = extractPersonName(`${g1.proveedor} ${g1.descripcion}`);
+          const person2 = extractPersonName(`${g2.proveedor} ${g2.descripcion}`);
+          const payroll1 = isPayrollCategory(g1.categoria);
+          const payroll2 = isPayrollCategory(g2.categoria);
 
-      // Criterio 2: Mismo monto exacto y fecha dentro de la tolerancia
-      const diffMonto = Math.abs(g1.monto - g2.monto);
-      if (diffMonto < 0.01) {
-        const dias = diffDays(g1.fecha, g2.fecha);
-        if (dias <= toleranciaDias) {
-          const provSimilar = g1.proveedor && g2.proveedor &&
-            (g1.proveedor.toLowerCase().includes(g2.proveedor.toLowerCase()) ||
-             g2.proveedor.toLowerCase().includes(g1.proveedor.toLowerCase()));
-          const descSimilar = g1.descripcion && g2.descripcion &&
-            (g1.descripcion.toLowerCase().includes(g2.descripcion.toLowerCase()) ||
-             g2.descripcion.toLowerCase().includes(g1.descripcion.toLowerCase()));
+          // REGLA 1: NÓMINA (Pagos de quincena a empleados)
+          if (payroll1 || payroll2) {
+            // Si los beneficiarios son personas distintas (ej. Charbela vs Giovanna vs Gladys): NUNCA duplicado
+            if (person1 && person2 && person1 !== person2) {
+              continue;
+            }
+            // Solo marcar si es la MISMA persona, con el mismo monto y en la misma fecha exacta
+            if (person1 && person2 && person1 === person2 && dias === 0) {
+              esDuplicado = true;
+              razon = `Mismo empleado (${person1}) registrado dos veces el mismo día (${g1.fecha}) por $${g1.monto.toFixed(2)}`;
+              confianza = "media";
+            }
+          }
+          // REGLA 2: CHOFER / LOGÍSTICA (Carreras en días distintos nunca son duplicados)
+          else if (isTransportExpense(g1.categoria, g1.descripcion) || isTransportExpense(g2.categoria, g2.descripcion)) {
+            if (dias === 0) {
+              const provSame = g1.proveedor && g2.proveedor && g1.proveedor.toLowerCase() === g2.proveedor.toLowerCase();
+              const descSame = g1.descripcion && g2.descripcion && g1.descripcion.toLowerCase() === g2.descripcion.toLowerCase();
+              if (provSame || descSame) {
+                esDuplicado = true;
+                razon = `Mismo chofer/transporte registrado dos veces el mismo día (${g1.fecha})`;
+                confianza = "media";
+              }
+            }
+          }
+          // REGLA 3: GASTOS GENERALES (Materia Prima, Insumos, Servicios, etc.)
+          else {
+            const p1 = g1.proveedor.toLowerCase();
+            const p2 = g2.proveedor.toLowerCase();
+            const provDistinct = p1 && p2 && p1 !== p2 && !p1.includes(p2) && !p2.includes(p1);
 
-          if (provSimilar || descSimilar || dias === 0) {
-            esDuplicado = true;
-            razon = `Mismo monto ($${g1.monto.toFixed(2)}) y fecha cercana (${dias} día(s) de diferencia)`;
+            // Si los proveedores son explícitamente distintos (ej. Supermaxi vs Primax): NUNCA duplicado
+            if (!provDistinct) {
+              const provSame = p1 && p2 && (p1 === p2 || p1.includes(p2) || p2.includes(p1));
+              const descSame = g1.descripcion && g2.descripcion &&
+                (g1.descripcion.toLowerCase() === g2.descripcion.toLowerCase() ||
+                 g1.descripcion.toLowerCase().includes(g2.descripcion.toLowerCase()) ||
+                 g2.descripcion.toLowerCase().includes(g1.descripcion.toLowerCase()));
+
+              // Mismo día con coincidencia de proveedor o descripción
+              if (dias === 0 && (provSame || descSame)) {
+                esDuplicado = true;
+                razon = `Mismo monto ($${g1.monto.toFixed(2)}), misma fecha (${g1.fecha}) y coincidencia de ${provSame ? 'proveedor' : 'concepto'}`;
+                confianza = provSame ? "alta" : "media";
+              } else if (dias <= toleranciaDias && toleranciaDias > 0 && provSame && descSame) {
+                esDuplicado = true;
+                razon = `Mismo proveedor y descripción idéntica con ${dias} día(s) de diferencia`;
+                confianza = "baja";
+              }
+            }
           }
         }
       }
 
       if (esDuplicado) {
         g2._razon = razon;
+        g2._confianza = confianza;
         grupo.push(g2);
         procesados.add(g2.id);
       }
@@ -104,8 +196,7 @@ export async function detectDuplicateExpenses({ mes, toleranciaDias = 1 } = {}) 
     if (grupo.length > 1) {
       procesados.add(g1.id);
 
-      // Determinar cuál es el mejor candidato a conservar:
-      // Prioridad: 1) Tiene comprobante adjunto, 2) Tiene referencia bancaria, 3) Creado primero
+      // Determinar cuál conservar: 1) Tiene comprobante, 2) Tiene referencia bancaria, 3) Primero creado
       grupo.sort((a, b) => {
         if (a.tieneComprobante && !b.tieneComprobante) return -1;
         if (!a.tieneComprobante && b.tieneComprobante) return 1;
@@ -118,7 +209,8 @@ export async function detectDuplicateExpenses({ mes, toleranciaDias = 1 } = {}) 
       const duplicados = grupo.slice(1);
 
       gruposDuplicados.push({
-        criterio: duplicados[0]._razon || "Coincidencia de datos",
+        criterio: duplicados[0]._razon || "Coincidencia estricta de datos",
+        nivelConfianza: duplicados[0]._confianza || "alta",
         monto: conservar.monto.toFixed(2),
         candidatoAConservar: {
           gastoId: conservar.id,
@@ -156,8 +248,125 @@ export async function detectDuplicateExpenses({ mes, toleranciaDias = 1 } = {}) 
     montoTotalInfladoPorDuplicados: totalMontoDuplicado.toFixed(2),
     grupos: gruposDuplicados,
     mensaje: totalDuplicadosEliminables > 0
-      ? `⚠️ Se detectaron ${totalDuplicadosEliminables} gastos duplicados que están inflando los egresos en $${totalMontoDuplicado.toFixed(2)}.`
-      : "✅ No se encontraron gastos duplicados en el periodo auditado. La contabilidad está limpia."
+      ? `⚠️ Se detectaron ${totalDuplicadosEliminables} gastos duplicados confirmados que están inflando los egresos en $${totalMontoDuplicado.toFixed(2)}.`
+      : "✅ No se encontraron gastos duplicados en el periodo auditado. La nómina y los pagos recurrentes están protegidos y la contabilidad está limpia."
+  };
+}
+
+/**
+ * LISTAR GASTOS CON FILTROS AVANZADOS Y ORDENACIÓN
+ * Permite a Claude auditar gastos por fecha del gasto o por fecha de carga al CRM (createdAt).
+ */
+export async function listExpenses({
+  mes,
+  fechaInicio,
+  fechaFin,
+  categoria,
+  proveedor,
+  ordenarPor = "fecha", // 'fecha' o 'fechaCreacion' / 'createdAt'
+  creadosHoy = false,
+  limite = 100
+} = {}) {
+  let q;
+  if (mes) {
+    const cleanMes = mes.trim().substring(0, 7);
+    q = query(collection(db, "gastos"), where("mesContable", "==", cleanMes));
+  } else {
+    q = query(collection(db, "gastos"), limit(350));
+  }
+
+  const snap = await getDocs(q);
+  const todayEcuador = getEcuadorToday();
+
+  let gastos = snap.docs.map(d => {
+    const data = d.data();
+    const fecha = normalizeEcuadorDate(data.fechaEmision || data.fechaPago || data.createdAt);
+    const createdAtStr = formatEcuadorDateTime(data.createdAt);
+    const createdDate = createdAtStr ? createdAtStr.substring(0, 10) : "";
+
+    return {
+      id: d.id,
+      monto: parseFloat(data.monto || 0),
+      fecha,
+      categoria: data.categoria || "Otros",
+      proveedor: (data.proveedor || data.proveedorNombre || "No indicado").trim(),
+      descripcion: (data.descripcion || "").trim(),
+      metodoPago: data.metodoPago || "Transferencia",
+      referenciaBancaria: data.referenciaBancaria || "N/A",
+      tieneComprobante: Boolean(data.facturaUrl || data.comprobanteUrl),
+      facturaUrl: data.facturaUrl || data.comprobanteUrl || null,
+      mesContable: data.mesContable || fecha.substring(0, 7),
+      estado: data.estado || "pagado",
+      createdAtEcuador: createdAtStr || "No registrado",
+      createdDateEcuador: createdDate
+    };
+  });
+
+  // Filtros
+  if (creadosHoy) {
+    gastos = gastos.filter(g => g.createdDateEcuador === todayEcuador);
+  }
+
+  if (fechaInicio) {
+    gastos = gastos.filter(g => g.fecha >= fechaInicio);
+  }
+  if (fechaFin) {
+    gastos = gastos.filter(g => g.fecha <= fechaFin);
+  }
+
+  if (categoria) {
+    const catLower = categoria.toLowerCase().trim();
+    gastos = gastos.filter(g => g.categoria.toLowerCase().includes(catLower));
+  }
+
+  if (proveedor) {
+    const provLower = proveedor.toLowerCase().trim();
+    gastos = gastos.filter(g =>
+      g.proveedor.toLowerCase().includes(provLower) ||
+      g.descripcion.toLowerCase().includes(provLower)
+    );
+  }
+
+  // Ordenación
+  if (ordenarPor === "fechaCreacion" || ordenarPor === "createdAt") {
+    gastos.sort((a, b) => b.createdAtEcuador.localeCompare(a.createdAtEcuador));
+  } else {
+    gastos.sort((a, b) => b.fecha.localeCompare(a.fecha));
+  }
+
+  const maxLim = Math.min(Math.max(limite, 1), 300);
+  const seleccionados = gastos.slice(0, maxLim);
+
+  const sumaMonto = seleccionados.reduce((s, g) => s + g.monto, 0);
+  const porCategoria = {};
+  seleccionados.forEach(g => {
+    porCategoria[g.categoria] = (porCategoria[g.categoria] || 0) + g.monto;
+  });
+
+  return {
+    periodoConsultado: mes || (fechaInicio ? `${fechaInicio} al ${fechaFin || todayEcuador}` : "Recientes"),
+    criterioOrden: ordenarPor === "fechaCreacion" ? "Fecha de carga en CRM (más recientes primero)" : "Fecha de emisión del gasto",
+    totalGastosEncontrados: gastos.length,
+    totalMostrados: seleccionados.length,
+    sumaTotalMonto: sumaMonto.toFixed(2),
+    desglosePorCategoria: Object.entries(porCategoria).map(([cat, m]) => ({
+      categoria: cat,
+      monto: m.toFixed(2),
+      porcentaje: sumaMonto > 0 ? `${((m / sumaMonto) * 100).toFixed(1)}%` : "0%"
+    })),
+    gastos: seleccionados.map(g => ({
+      id: g.id,
+      fecha: g.fecha,
+      monto: g.monto.toFixed(2),
+      categoria: g.categoria,
+      proveedor: g.proveedor,
+      descripcion: g.descripcion,
+      referenciaBancaria: g.referenciaBancaria,
+      tieneComprobante: g.tieneComprobante,
+      facturaUrl: g.facturaUrl,
+      fechaCargaCRM: g.createdAtEcuador,
+      mesContable: g.mesContable
+    }))
   };
 }
 
@@ -248,7 +457,6 @@ export async function modifyExpense({ gastoId, cambios = {} }) {
     throw new Error(`El gasto #${cleanId} no existe en el CRM.`);
   }
 
-  const current = snap.data();
   const updatePayload = {
     updatedAt: Timestamp.now()
   };

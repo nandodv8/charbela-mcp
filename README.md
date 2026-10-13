@@ -34,7 +34,7 @@ Copia ese texto y pégalo como primer mensaje en Claude Desktop para activar el 
 
 ---
 
-## 🛠️ Herramientas Disponibles en Claude (22 Tools)
+## 🛠️ Herramientas Disponibles en Claude (23 Tools)
 
 ### 💰 Gastos, Duplicados y Finanzas
 - `detectar_gastos_duplicados`: Audita gastos registrados en el CRM para detectar pagos duplicados (por misma referencia bancaria o monto idéntico en fechas cercanas) y recomienda cuál conservar.
@@ -46,6 +46,7 @@ Copia ese texto y pégalo como primer mensaje en Claude Desktop para activar el 
 - `registrar_gasto_comprobante`: Registra gasto y asocia comprobante o número de autorización para control anti-duplicados.
 - `conciliar_estado_cuenta_banco`: Cruza débitos bancarios contra el CRM para detectar faltantes.
 - `parsear_notificacion_bancaria`: Extrae monto, comercio y fecha de correos de bancos ecuatorianos (Pichincha, Guayaquil, Produbanco, Deuna).
+- `listar_gastos`: Lista y consulta gastos detallados del CRM con filtros por mes, rango de fechas, categoría, proveedor o fecha de carga (`createdAt`). Permite ver exactamente qué gastos se agregaron hoy o en cualquier periodo sin recortes.
 - `consultar_gastos_sin_comprobante`: Auditoría preventiva de gastos que aún no tienen comprobante adjunto.
 - `consultar_finanzas_resumen`: Estado de Resultados P&L conversacional del mes (Devengado vs Flujo de Caja, COGS, Utilidad Bruta, Margen Bruto, OPEX, Utilidad Neta, CxC y CxP).
 - `consultar_facturas_sri`: Auditoría de comprobantes electrónicos autorizados en el SRI (Dátil).

@@ -42,7 +42,8 @@ import {
   detectDuplicateExpenses,
   deleteExpense,
   batchDeleteExpenses,
-  modifyExpense
+  modifyExpense,
+  listExpenses
 } from "./services/expenseDuplicateService.js";
 
 /**
@@ -296,6 +297,22 @@ export function createCharbelaMcpServer() {
       }).describe("Campos específicos a actualizar")
     },
     async (args) => runWithTelemetry("modificar_gasto", args, () => modifyExpense(args))
+  );
+
+  server.tool(
+    "listar_gastos",
+    "Lista y consulta gastos detallados del CRM con filtros por mes, rango de fechas, categoría, proveedor o fecha de carga al sistema (createdAt). Permite ver exactamente qué gastos se agregaron hoy o en cualquier periodo sin recortes ni límites arbitrarios.",
+    {
+      mes: z.string().optional().describe("Mes contable en formato YYYY-MM (ej. '2026-09' o '2026-10')"),
+      fechaInicio: z.string().optional().describe("Fecha de inicio en formato YYYY-MM-DD"),
+      fechaFin: z.string().optional().describe("Fecha de fin en formato YYYY-MM-DD"),
+      categoria: z.string().optional().describe("Filtrar por categoría (ej. 'Nómina', 'Materia Prima', 'Servicios', 'Gastos de operación')"),
+      proveedor: z.string().optional().describe("Filtrar por nombre de proveedor o concepto"),
+      ordenarPor: z.enum(["fecha", "fechaCreacion"]).default("fecha").describe("'fecha' (emisión del gasto) o 'fechaCreacion' (cuándo se subió al CRM)"),
+      creadosHoy: z.boolean().default(false).describe("Si es true, muestra exclusivamente los gastos ingresados al sistema el día de hoy"),
+      limite: z.number().default(100).describe("Límite de gastos a listar (por defecto 100, máximo 300)")
+    },
+    async (args) => runWithTelemetry("listar_gastos", args, () => listExpenses(args))
   );
 
   // ============================================================================
