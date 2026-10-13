@@ -5,26 +5,15 @@ Permite a Claude registrar gastos en lote, consultar pedidos, obrador, facturaci
 
 ---
 
-## 🍎 Instalación en Mac (Paso a Paso Rápido)
+## 🍎 Instalación en Mac (Opción Más Rápida en 1 Línea)
 
-### 1. Requisitos
-- Tener instalado [Claude Desktop](https://claude.ai/download).
-- Tener instalado [Node.js (versión LTS)](https://nodejs.org/).
-
-### 2. Descargar e Instalar
-Puedes clonar este repositorio o descargarlo en ZIP desde el botón verde **Code -> Download ZIP**:
+Abre la **Terminal** en tu Mac (presiona `Cmd + Barra espaciadora`, escribe `Terminal` y pulsa Enter), luego pega esta sola línea y pulsa Enter:
 
 ```bash
-# Opción por Terminal:
-git clone https://github.com/nandodv8/charbela-mcp.git
+curl -sSL https://raw.githubusercontent.com/nandodv8/charbela-mcp/main/setup_mac.sh | bash
 ```
 
-1. Entra a la carpeta descargada `charbela-mcp`.
-2. Haz **clic derecho** sobre:
-   > **`instalar_mac.command`**
-3. Elige **Abrir** (y en el aviso de seguridad de macOS vuelve a hacer clic en **Abrir**).
-4. La Terminal ejecutará la instalación y verificación automáticamente.
-5. Cuando veas `🎉 Instalación completada`, **cierra Claude con Cmd + Q** y vuelve a abrirlo.
+Cuando veas `🎉 ¡LISTO CHARBELA!`, cierra Claude por completo con `Cmd + Q` y vuelve a abrirlo.
 
 ---
 
@@ -45,17 +34,21 @@ Copia ese texto y pégalo como primer mensaje en Claude Desktop para activar el 
 
 ---
 
-## 🛠️ Herramientas Disponibles en Claude (18 Tools)
+## 🛠️ Herramientas Disponibles en Claude (22 Tools)
 
-### 💰 Gastos y Finanzas
+### 💰 Gastos, Duplicados y Finanzas
+- `detectar_gastos_duplicados`: Audita gastos registrados en el CRM para detectar pagos duplicados (por misma referencia bancaria o monto idéntico en fechas cercanas) y recomienda cuál conservar.
+- `eliminar_gasto`: Elimina permanentemente un gasto erróneo o duplicado del CRM mediante su ID de documento en Firestore, generando constancia contable de auditoría.
+- `eliminar_gastos_en_lote`: Elimina en bloque una lista de gastos duplicados confirmados tras una auditoría contable.
+- `modificar_gasto`: Modifica quirúrgicamente campos de un gasto existente (monto, fecha, proveedor, descripción, categoría, método o referencia).
 - `registrar_gastos_en_lote`: Guarda múltiples gastos bancarios o de Excel en un solo mensaje.
-- `registrar_gasto`: Registra un gasto individual con categoría, proveedor y fecha.
-- `registrar_gasto_comprobante`: Registra gasto y asocia comprobante o número de autorización.
+- `registrar_gasto`: Registra un gasto individual con categoría, proveedor y fecha ecuatoriana (UTC-5).
+- `registrar_gasto_comprobante`: Registra gasto y asocia comprobante o número de autorización para control anti-duplicados.
 - `conciliar_estado_cuenta_banco`: Cruza débitos bancarios contra el CRM para detectar faltantes.
-- `parsear_notificacion_bancaria`: Extrae monto, comercio y fecha de correos bancarios.
-- `consultar_gastos_sin_comprobante`: Auditoría preventiva de gastos pendientes de comprobante.
-- `consultar_finanzas_resumen`: Resumen P&L conversacional del mes o período.
-- `consultar_facturas_sri`: Auditoría de comprobantes electrónicos autorizados en el SRI.
+- `parsear_notificacion_bancaria`: Extrae monto, comercio y fecha de correos de bancos ecuatorianos (Pichincha, Guayaquil, Produbanco, Deuna).
+- `consultar_gastos_sin_comprobante`: Auditoría preventiva de gastos que aún no tienen comprobante adjunto.
+- `consultar_finanzas_resumen`: Estado de Resultados P&L conversacional del mes (Devengado vs Flujo de Caja, COGS, Utilidad Bruta, Margen Bruto, OPEX, Utilidad Neta, CxC y CxP).
+- `consultar_facturas_sri`: Auditoría de comprobantes electrónicos autorizados en el SRI (Dátil).
 
 ### 🎂 Pedidos y Clientes
 - `crear_pedido`: Registra un nuevo pedido con fecha de entrega, sabores y anticipo.
@@ -64,4 +57,5 @@ Copia ese texto y pégalo como primer mensaje en Claude Desktop para activar el 
 - `crear_o_actualizar_cliente`: Guarda teléfonos, nombres y direcciones de clientes.
 - `consultar_pedido_detalle`: Muestra todo el detalle de una orden (abonos, saldos, sabores).
 - `buscar_pedidos`: Busca pedidos por nombre, teléfono, producto o fecha.
-- `consultar_agenda_obrador`: Hoja de producción del taller (horneado, decoración y despacho).
+- `consultar_agenda_obrador`: Hoja de producción del taller (horneado, decoración y despacho para hoy o fecha específica).
+- `registrar_abono`: Registra un pago parcial a un pedido y actualiza su saldo pendiente.

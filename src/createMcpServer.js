@@ -38,6 +38,13 @@ import {
   getExpensesWithoutReceipts
 } from "./services/expenseReceiptService.js";
 
+import {
+  detectDuplicateExpenses,
+  deleteExpense,
+  batchDeleteExpenses,
+  modifyExpense
+} from "./services/expenseDuplicateService.js";
+
 /**
  * Envoltorio con telemetría integrada y manejo de errores
  */
@@ -241,6 +248,54 @@ export function createCharbelaMcpServer() {
       limite: z.number().default(15).describe("Máximo de gastos a auditar")
     },
     async (args) => runWithTelemetry("consultar_gastos_sin_comprobante", args, () => getExpensesWithoutReceipts(args))
+  );
+
+  server.tool(
+    "detectar_gastos_duplicados",
+    "Audita los gastos registrados en el CRM para detectar registros duplicados (por misma referencia bancaria o por coincidencia de monto y fecha cercana), recomendando cuál conservar.",
+    {
+      mes: z.string().optional().describe("Mes a auditar en formato YYYY-MM (ej. '2026-10'). Si no se indica, audita los últimos 250 gastos."),
+      toleranciaDias: z.number().default(1).describe("Tolerancia máxima en días de diferencia entre fechas con mismo monto (por defecto 1 día).")
+    },
+    async (args) => runWithTelemetry("detectar_gastos_duplicados", args, () => detectDuplicateExpenses(args))
+  );
+
+  server.tool(
+    "eliminar_gasto",
+    "Elimina de forma permanente un gasto erróneo o duplicado del CRM mediante su ID de documento en Firestore, generando constancia contable de auditoría.",
+    {
+      gastoId: z.string().describe("ID del gasto a eliminar en Firestore"),
+      motivo: z.string().optional().describe("Motivo de la eliminación (ej. 'Duplicado de transferencia #12345')")
+    },
+    async (args) => runWithTelemetry("eliminar_gasto", args, () => deleteExpense(args))
+  );
+
+  server.tool(
+    "eliminar_gastos_en_lote",
+    "Elimina de forma masiva y segura una lista de gastos duplicados confirmados tras una auditoría contable.",
+    {
+      gastoIds: z.array(z.string()).describe("Lista de IDs de gastos a eliminar en Firestore"),
+      motivo: z.string().optional().describe("Motivo de la eliminación masiva")
+    },
+    async (args) => runWithTelemetry("eliminar_gastos_en_lote", args, () => batchDeleteExpenses(args))
+  );
+
+  server.tool(
+    "modificar_gasto",
+    "Modifica quirúrgicamente campos de un gasto existente en el CRM (monto, fecha, proveedor, descripción, categoría, método o referencia).",
+    {
+      gastoId: z.string().describe("ID del gasto a modificar en Firestore"),
+      cambios: z.object({
+        monto: z.number().optional().describe("Nuevo monto en dólares"),
+        fecha: z.string().optional().describe("Nueva fecha en formato YYYY-MM-DD"),
+        descripcion: z.string().optional().describe("Nuevo concepto o detalle"),
+        proveedor: z.string().optional().describe("Nuevo nombre de proveedor"),
+        categoria: z.string().optional().describe("Nueva categoría contable"),
+        metodoPago: z.string().optional().describe("Nuevo método de pago"),
+        referenciaBancaria: z.string().optional().describe("Nueva referencia de transferencia")
+      }).describe("Campos específicos a actualizar")
+    },
+    async (args) => runWithTelemetry("modificar_gasto", args, () => modifyExpense(args))
   );
 
   // ============================================================================

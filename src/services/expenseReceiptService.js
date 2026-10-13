@@ -18,17 +18,11 @@ import {
 } from "firebase/firestore";
 import { ref, uploadString, getDownloadURL } from "firebase/storage";
 
-function toDateStr(val) {
-  if (!val) return "";
-  if (typeof val === "string") return val.substring(0, 10);
-  if (val.toDate && typeof val.toDate === "function") {
-    return val.toDate().toISOString().substring(0, 10);
-  }
-  if (val instanceof Date) {
-    return val.toISOString().substring(0, 10);
-  }
-  return "";
-}
+import {
+  normalizeEcuadorDate,
+  getEcuadorToday,
+  getEcuadorMesContable
+} from "../utils/ecuadorDateUtils.js";
 
 /**
  * Heurística ecuatoriana para inferir la categoría contable de un gasto
@@ -145,14 +139,14 @@ export function parseBankNotificationText(emailText = "") {
   }
 
   // 5. Extracción de Fecha
-  let fecha = new Date().toISOString().substring(0, 10);
+  let fecha = getEcuadorToday();
   const fechaRegex = /([0-9]{1,2})[\/\-]([0-9]{1,2})[\/\-]([0-9]{4})/;
   const fechaMatch = clean.match(fechaRegex);
   if (fechaMatch) {
     const dia = fechaMatch[1].padStart(2, "0");
     const mes = fechaMatch[2].padStart(2, "0");
     const anio = fechaMatch[3];
-    fecha = `${anio}-${mes}-${dia}`;
+    fecha = normalizeEcuadorDate(`${anio}-${mes}-${dia}`);
   }
 
   // 6. Inferencia de Categoría y Método
@@ -195,9 +189,16 @@ export async function registerExpenseWithReceipt({
     throw new Error("Debes indicar una descripción o detalle del gasto.");
   }
 
-  const targetDate = fecha || new Date().toISOString().substring(0, 10);
-  const cleanCat = categoria ? categoria.trim() : inferCategoryFromText(`${descripcion} ${proveedor}`);
+  const targetDate = fecha ? normalizeEcuadorDate(fecha) : getEcuadorToday();
+  const targetMes = getEcuadorMesContable(targetDate);
+  const rawCat = categoria ? categoria.trim() : inferCategoryFromText(`${descripcion} ${proveedor}`);
+  const catLower = rawCat.toLowerCase();
+  const cleanCat = (catLower === "logistica" || catLower === "logística" || catLower.includes("transporte"))
+    ? "LOGISTICA de transporte"
+    : rawCat;
+
   const refLimpia = (referenciaBancaria || "").trim();
+  const provClean = (proveedor || "").trim();
 
   // 1. REVISIÓN ANTI-DUPLICADOS: Evitar que Charbela registre el mismo comprobante 2 veces
   if (refLimpia) {
@@ -232,7 +233,7 @@ export async function registerExpenseWithReceipt({
     }
   }
 
-  const esCogs = cleanCat.toLowerCase().includes("materia") || cleanCat.toLowerCase().includes("mano de obra");
+  const esCogs = cleanCat.toLowerCase() === "materia prima" || cleanCat.toLowerCase() === "mano de obra directa";
 
   const nuevoGasto = {
     monto: montoNum,
@@ -240,7 +241,8 @@ export async function registerExpenseWithReceipt({
     iva: 0,
     categoria: cleanCat,
     descripcion: descripcion.trim(),
-    proveedor: (proveedor || "").trim(),
+    proveedor: provClean,
+    proveedorNombre: provClean,
     metodoPago: metodoPago.trim(),
     estado: "pagado",
     montoPagado: montoNum,
@@ -253,7 +255,10 @@ export async function registerExpenseWithReceipt({
     tieneComprobante: Boolean(finalComprobanteUrl || refLimpia),
     fechaEmision: targetDate,
     fechaPago: targetDate,
-    mesContable: targetDate.substring(0, 7),
+    fechaVencimiento: targetDate,
+    diasCredito: 0,
+    tipoOperacion: "contado",
+    mesContable: targetMes,
     notas: (notas || "").trim(),
     origen: "Claude Desktop MCP Gastos",
     createdAt: Timestamp.now()
@@ -267,12 +272,13 @@ export async function registerExpenseWithReceipt({
     monto: montoNum.toFixed(2),
     categoria: cleanCat,
     tipoContable: esCogs ? "COGS (Costo Directo)" : "OPEX (Gasto Operativo)",
-    proveedor: proveedor || "No especificado",
+    proveedor: provClean || "No especificado",
     referenciaBancaria: refLimpia || "Sin referencia",
     fecha: targetDate,
+    mesContable: targetMes,
     comprobanteAdjunto: Boolean(finalComprobanteUrl),
     comprobanteUrl: finalComprobanteUrl,
-    mensaje: `🧾 Gasto de $${montoNum.toFixed(2)} registrado exitosamente bajo "${cleanCat}".`
+    mensaje: `🧾 Gasto de $${montoNum.toFixed(2)} registrado exitosamente bajo "${cleanCat}" en periodo ${targetMes}.`
   };
 }
 
@@ -297,7 +303,7 @@ export async function reconcileBankStatement({ transacciones = [] }) {
   for (const t of transacciones) {
     const monto = parseFloat(t.monto || 0);
     const tipo = (t.tipo || "debito").toLowerCase();
-    const fecha = toDateStr(t.fecha || "");
+    const fecha = t.fecha ? normalizeEcuadorDate(t.fecha) : "";
     const descripcion = (t.descripcion || "").trim();
     const referencia = (t.referencia || "").trim();
 
@@ -324,7 +330,7 @@ export async function reconcileBankStatement({ transacciones = [] }) {
         const categoriaSugerida = inferCategoryFromText(descripcion);
         noRegistradas.push({
           transaccion: {
-            fecha: fecha || new Date().toISOString().substring(0, 10),
+            fecha: fecha || getEcuadorToday(),
             descripcion,
             monto: monto.toFixed(2),
             referencia: referencia || "N/A"

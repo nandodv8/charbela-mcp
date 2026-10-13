@@ -17,19 +17,13 @@ import {
   addDoc
 } from "firebase/firestore";
 
-const CRM_BASE_URL = "https://charbela-crm.firebaseapp.com";
+import {
+  normalizeEcuadorDate,
+  getEcuadorToday,
+  getEcuadorMesContable
+} from "../utils/ecuadorDateUtils.js";
 
-function toDateStr(val) {
-  if (!val) return "";
-  if (typeof val === "string") return val.substring(0, 10);
-  if (val.toDate && typeof val.toDate === "function") {
-    return val.toDate().toISOString().substring(0, 10);
-  }
-  if (val instanceof Date) {
-    return val.toISOString().substring(0, 10);
-  }
-  return "";
-}
+const CRM_BASE_URL = "https://charbela-crm.firebaseapp.com";
 
 /**
  * REGISTRAR ABONO / PAGO A UN PEDIDO (Transacción Atómica)
@@ -48,7 +42,7 @@ export async function registerPaymentAbono({
     throw new Error("El monto del abono debe ser un número mayor a cero.");
   }
 
-  const targetDate = fecha || new Date().toISOString().substring(0, 10);
+  const targetDate = fecha ? normalizeEcuadorDate(fecha) : getEcuadorToday();
   const newAbonoRef = doc(collection(db, "abonos"));
   let pedidoData = null;
   let nuevoPagado = 0;
@@ -107,7 +101,7 @@ export async function registerPaymentAbono({
 
 /**
  * REGISTRAR UN GASTO / EGRESO CONTABLE DIRECTO
- * Clasificación COGS vs OPEX estandarizada.
+ * Clasificación COGS vs OPEX estandarizada y alineada al CRM.
  */
 export async function registerExpenseGasto({
   monto,
@@ -125,17 +119,27 @@ export async function registerExpenseGasto({
     throw new Error("La descripción del gasto es obligatoria (ej. 'Compra de 5kg de cobertura de chocolate').");
   }
 
-  const fechaRef = fecha || new Date().toISOString().substring(0, 10);
-  const cleanCat = categoria.trim();
-  const esCogs = cleanCat.toLowerCase().includes("materia") || cleanCat.toLowerCase().includes("mano de obra");
+  const fechaRef = fecha ? normalizeEcuadorDate(fecha) : getEcuadorToday();
+  const cleanCat = categoria ? categoria.trim() : "Materia Prima";
+  const catLower = cleanCat.toLowerCase();
+  
+  // Normalizar categoría de transporte/logística
+  const finalCat = (catLower === "logistica" || catLower === "logística" || catLower.includes("transporte"))
+    ? "LOGISTICA de transporte"
+    : cleanCat;
+
+  const esCogs = finalCat.toLowerCase() === "materia prima" || finalCat.toLowerCase() === "mano de obra directa";
+  const mesContable = getEcuadorMesContable(fechaRef);
+  const provClean = (proveedor || "").trim();
 
   const gastoDoc = {
     monto: montoNum,
     subtotal: montoNum,
     iva: 0,
-    categoria: cleanCat,
+    categoria: finalCat,
     descripcion: descripcion.trim(),
-    proveedor: (proveedor || "").trim(),
+    proveedor: provClean,
+    proveedorNombre: provClean,
     metodoPago: metodoPago.trim(),
     estado: "pagado",
     montoPagado: montoNum,
@@ -143,7 +147,10 @@ export async function registerExpenseGasto({
     esCogs,
     fechaEmision: fechaRef,
     fechaPago: fechaRef,
-    mesContable: fechaRef.substring(0, 7),
+    fechaVencimiento: fechaRef,
+    diasCredito: 0,
+    tipoOperacion: "contado",
+    mesContable,
     origen: "Claude Desktop MCP",
     createdAt: Timestamp.now()
   };
@@ -154,126 +161,194 @@ export async function registerExpenseGasto({
     success: true,
     gastoId: docRef.id,
     monto: montoNum.toFixed(2),
-    categoria: cleanCat,
+    categoria: finalCat,
+    tipoContable: esCogs ? "COGS (Costo Directo)" : "OPEX (Gasto Operativo)",
     descripcion: descripcion.trim(),
+    proveedor: provClean || "No indicado",
     fecha: fechaRef,
-    mensaje: `🧾 Gasto de $${montoNum.toFixed(2)} (${cleanCat}) guardado exitosamente en contabilidad.`
+    mesContable,
+    mensaje: `🧾 Gasto de $${montoNum.toFixed(2)} (${finalCat}) guardado exitosamente en contabilidad (${mesContable}).`
   };
 }
 
 /**
  * CONSULTAR ESTADO FINANCIERO Y P&L CONVERSACIONAL (Día, Semana o Mes)
+ * Alineado 100% con la lógica y fórmulas de Finanzas.jsx en el CRM de Charbela.
  */
 export async function getFinancialSummaryConversational({ fechaInicio, fechaFin, mes } = {}) {
-  const [pedidosSnap, abonosSnap, gastosSnap] = await Promise.all([
-    getDocs(query(collection(db, "pedidos"), limit(150))),
-    getDocs(query(collection(db, "abonos"), limit(200))),
-    getDocs(query(collection(db, "gastos"), limit(150)))
-  ]);
-
-  let start = fechaInicio;
-  let end = fechaFin;
-  if (mes) {
-    start = `${mes}-01`;
-    end = `${mes}-31`;
+  // Determinar mes contable objetivo
+  let targetMes = mes ? mes.trim().substring(0, 7) : null;
+  if (!targetMes && fechaInicio) {
+    targetMes = fechaInicio.trim().substring(0, 7);
+  }
+  if (!targetMes) {
+    targetMes = getEcuadorMesContable();
   }
 
-  // 1. Cobros en Efectivo / Abonos reales del periodo
-  let totalDineroCobrado = 0;
-  const abonosDetalle = [];
-  abonosSnap.forEach(d => {
-    const a = d.data();
-    const fStr = toDateStr(a.fecha || a.createdAt);
-    if (start && fStr < start) return;
-    if (end && fStr > end) return;
+  // Traer pedidos y gastos del CRM
+  const [pedidosSnap, gastosSnap] = await Promise.all([
+    getDocs(query(collection(db, "pedidos"), limit(300))),
+    getDocs(query(collection(db, "gastos"), where("mesContable", "==", targetMes)))
+  ]);
 
-    const m = parseFloat(a.monto || 0);
-    totalDineroCobrado += m;
-    abonosDetalle.push({
-      monto: m,
-      metodo: a.metodoPago || "Efectivo",
-      fecha: fStr
-    });
-  });
-
-  // 2. Ventas Totales contratadas en el periodo
-  let totalVentasContratadas = 0;
-  let totalPedidosPeriodo = 0;
-  let saldoPorCobrarPeriodo = 0;
-  const deudores = [];
-
-  pedidosSnap.forEach(d => {
-    const p = d.data();
-    if (p.estado === "cancelado" || p.estado === "anulado") return;
-
-    const fStr = toDateStr(p.fechaEnvio || p.createdAt);
-    if (start && fStr < start) return;
-    if (end && fStr > end) return;
-
-    const tot = parseFloat(p.total || p.coste || 0);
-    const pag = parseFloat(p.pagado || p.abono || 0);
-    const s = Math.max(0, tot - pag);
-
-    totalVentasContratadas += tot;
-    totalPedidosPeriodo++;
-    if (s > 0.05) {
-      saldoPorCobrarPeriodo += s;
-      deudores.push({
-        orderId: d.id,
-        cliente: p.clienteNombre || "Cliente",
-        telefono: p.clienteTelefono || "",
-        fechaEntrega: fStr,
-        total: tot.toFixed(2),
-        saldo: s.toFixed(2)
+  let gastosDocs = gastosSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  if (gastosDocs.length === 0) {
+    const todosGastosSnap = await getDocs(query(collection(db, "gastos"), limit(250)));
+    gastosDocs = todosGastosSnap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(g => {
+        const f = normalizeEcuadorDate(g.fechaEmision || g.fechaPago || g.createdAt);
+        return f.startsWith(targetMes) || g.mesContable === targetMes;
       });
-    }
-  });
+  }
 
-  // 3. Gastos del periodo desglosados por categoría
-  let totalGastos = 0;
+  // Normalizador de categoría idéntico a Finanzas.jsx
+  const normalizarCat = (cat) => {
+    if (!cat) return "Otros";
+    const cl = String(cat).trim().toLowerCase();
+    if (cl === "logística" || cl === "logistica" || cl === "logistica de transporte" || cl === "logística de transporte") {
+      return "LOGISTICA de transporte";
+    }
+    return String(cat).trim();
+  };
+
+  // Conjunto COGS (Costo directo de ventas)
+  const isCogs = (cat) => {
+    const l = normalizarCat(cat).toLowerCase();
+    return l === "materia prima" || l === "mano de obra directa";
+  };
+
+  // 1. Filtrar y procesar gastos
+  let totalEgresosMes = 0;
+  let totalCOGS = 0;
+  let totalOPEX = 0;
+  let totalIvaAcreditable = 0;
   const gastosPorCategoria = {};
   const listaGastos = [];
+  const cxpPendientes = [];
 
-  gastosSnap.forEach(d => {
-    const g = d.data();
-    const fStr = toDateStr(g.fechaEmision || g.fechaPago || g.createdAt);
-    if (start && fStr < start) return;
-    if (end && fStr > end) return;
+  for (const g of gastosDocs) {
+    const fStr = normalizeEcuadorDate(g.fechaEmision || g.fechaPago || g.createdAt);
+    if (fStr < "2026-06-01") continue;
 
-    const m = parseFloat(g.monto || 0);
-    totalGastos += m;
-    const cat = g.categoria || "Otros";
-    gastosPorCategoria[cat] = (gastosPorCategoria[cat] || 0) + m;
+    const monto = parseFloat(g.monto || 0);
+    const catNorm = normalizarCat(g.categoria);
+    totalEgresosMes += monto;
+    totalIvaAcreditable += parseFloat(g.iva || 0);
+
+    if (isCogs(catNorm)) {
+      totalCOGS += monto;
+    } else {
+      totalOPEX += monto;
+    }
+
+    gastosPorCategoria[catNorm] = (gastosPorCategoria[catNorm] || 0) + monto;
 
     listaGastos.push({
-      id: d.id,
-      monto: m.toFixed(2),
-      categoria: cat,
+      id: g.id,
+      monto: monto.toFixed(2),
+      categoria: catNorm,
+      tipoContable: isCogs(catNorm) ? "COGS" : "OPEX",
       descripcion: g.descripcion || "",
+      proveedor: g.proveedor || g.proveedorNombre || "No indicado",
       fecha: fStr
     });
-  });
 
-  const flujoCajaNeto = totalDineroCobrado - totalGastos;
-  const margenOperativo = totalDineroCobrado > 0 ? ((flujoCajaNeto / totalDineroCobrado) * 100).toFixed(1) : "0";
+    // Cuentas por pagar (CxP): si está pendiente de pago o es a crédito
+    const saldoPendiente = parseFloat(g.montoPendiente !== undefined ? g.montoPendiente : (g.estado !== 'pagado' ? g.monto : 0));
+    if (saldoPendiente > 0.05 || (g.tipoOperacion === 'credito' && g.estado !== 'pagado')) {
+      cxpPendientes.push({
+        gastoId: g.id,
+        proveedor: g.proveedor || g.proveedorNombre || "Proveedor",
+        descripcion: g.descripcion || "",
+        montoTotal: monto.toFixed(2),
+        montoPendiente: saldoPendiente.toFixed(2),
+        fechaVencimiento: normalizeEcuadorDate(g.fechaVencimiento || g.fechaEmision)
+      });
+    }
+  }
+
+  // 2. Filtrar y procesar pedidos del mes
+  const estadosExcluidos = new Set(["borrador", "enviada", "cotización", "cotizacion", "cancelado", "anulado", "archivado"]);
+  let totalIngresosDevengado = 0;
+  let totalCobradoMes = 0;
+  let pedidosValidosCount = 0;
+  const cxcPendientes = [];
+
+  for (const doc of pedidosSnap.docs) {
+    const p = doc.data();
+    const st = (p.estado || "").toLowerCase();
+    if (estadosExcluidos.has(st)) continue;
+
+    const fEnvio = normalizeEcuadorDate(p.fechaEnvio || p.fecha || p.createdAt);
+    if (!fEnvio.startsWith(targetMes) || fEnvio < "2026-06-01") continue;
+
+    const total = parseFloat(p.total || p.coste || 0);
+    const pagado = parseFloat(p.pagado || p.abono || 0);
+    const saldo = Math.max(0, total - pagado);
+
+    totalIngresosDevengado += total;
+    totalCobradoMes += pagado;
+    pedidosValidosCount++;
+
+    if (saldo > 0.05) {
+      cxcPendientes.push({
+        orderId: doc.id,
+        cliente: p.clienteNombre || "Cliente",
+        telefono: p.clienteTelefono || "",
+        fechaEntrega: fEnvio,
+        total: total.toFixed(2),
+        saldo: saldo.toFixed(2),
+        estado: p.estado || "pendiente"
+      });
+    }
+  }
+
+  // 3. Cálculos P&L (Devengado)
+  const utilidadBruta = totalIngresosDevengado - totalCOGS;
+  const margenBrutoPct = totalIngresosDevengado > 0 ? ((utilidadBruta / totalIngresosDevengado) * 100).toFixed(1) : "0.0";
+
+  const utilidadNeta = utilidadBruta - totalOPEX;
+  const margenNetoPct = totalIngresosDevengado > 0 ? ((utilidadNeta / totalIngresosDevengado) * 100).toFixed(1) : "0.0";
+
+  // 4. Flujo de Caja
+  const flujoCajaNeto = totalCobradoMes - totalEgresosMes;
+
+  // Cuentas por Cobrar y por Pagar
+  const totalCxC = cxcPendientes.reduce((sum, c) => sum + parseFloat(c.saldo), 0);
+  const totalCxP = cxpPendientes.reduce((sum, c) => sum + parseFloat(c.montoPendiente), 0);
 
   return {
-    periodo: `${start || "Inicio"} al ${end || "Hoy"}`,
-    resumenEjecutivo: {
-      totalVentasContratadas: totalVentasContratadas.toFixed(2),
-      totalDineroCobradoEnCaja: totalDineroCobrado.toFixed(2),
-      totalGastosEgresos: totalGastos.toFixed(2),
-      flujoDeCajaNeto: flujoCajaNeto.toFixed(2),
-      margenEfectivoPorcentaje: `${margenOperativo}%`,
-      pedidosEnPeriodo: totalPedidosPeriodo,
-      totalSaldoPorCobrar: saldoPorCobrarPeriodo.toFixed(2)
+    periodo: targetMes,
+    criterioDevengado: {
+      ingresosTotalesFacturados: totalIngresosDevengado.toFixed(2),
+      cogsCostoDeVentas: totalCOGS.toFixed(2),
+      utilidadBruta: utilidadBruta.toFixed(2),
+      margenBrutoPorcentaje: `${margenBrutoPct}%`,
+      opexGastosOperativos: totalOPEX.toFixed(2),
+      utilidadNeta: utilidadNeta.toFixed(2),
+      margenNetoPorcentaje: `${margenNetoPct}%`,
+      pedidosConfirmados: pedidosValidosCount
     },
-    gastosDesglosadosPorCategoria: Object.entries(gastosPorCategoria).map(([categoria, monto]) => ({
+    criterioFlujoDeCaja: {
+      dineroCobradoEnEfectivo: totalCobradoMes.toFixed(2),
+      totalEgresosPagados: totalEgresosMes.toFixed(2),
+      flujoNetoDeCaja: flujoCajaNeto.toFixed(2),
+      estadoCaja: flujoCajaNeto >= 0 ? "SUPERAVIT" : "DEFICIT"
+    },
+    posicionLiquidez: {
+      cuentasPorCobrarClientesCxC: totalCxC.toFixed(2),
+      cuentasPorPagarProveedoresCxP: totalCxP.toFixed(2),
+      ivaAcreditableSoportado: totalIvaAcreditable.toFixed(2)
+    },
+    desgloseGastosPorCategoria: Object.entries(gastosPorCategoria).map(([categoria, monto]) => ({
       categoria,
+      clasificacion: isCogs(categoria) ? "COGS (Directo)" : "OPEX (Operativo)",
       monto: monto.toFixed(2),
-      porcentajeDelGasto: totalGastos > 0 ? `${((monto / totalGastos) * 100).toFixed(1)}%` : "0%"
+      porcentajeDelGasto: totalEgresosMes > 0 ? `${((monto / totalEgresosMes) * 100).toFixed(1)}%` : "0%"
     })),
-    cuentasPorCobrarPendientes: deudores.slice(0, 10),
+    clientesPendientesDePagoCxC: cxcPendientes.slice(0, 10),
+    cuentasPorPagarCxP: cxpPendientes.slice(0, 10),
     ultimosGastosRegistrados: listaGastos.slice(0, 8)
   };
 }
@@ -292,7 +367,7 @@ export async function getInvoicingAudit({ fechaInicio, fechaFin, soloConError = 
 
   for (const doc of pedidosSnap.docs) {
     const p = { id: doc.id, ...doc.data() };
-    const fecha = toDateStr(p.fechaEnvio || p.createdAt);
+    const fecha = normalizeEcuadorDate(p.fechaEnvio || p.createdAt);
 
     if (fechaInicio && fecha < fechaInicio) continue;
     if (fechaFin && fecha > fechaFin) continue;

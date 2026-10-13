@@ -18,19 +18,12 @@ import {
   runTransaction
 } from "firebase/firestore";
 
-const CRM_BASE_URL = "https://charbela-crm.firebaseapp.com";
+import {
+  normalizeEcuadorDate,
+  getEcuadorToday
+} from "../utils/ecuadorDateUtils.js";
 
-function toDateStr(val) {
-  if (!val) return "";
-  if (typeof val === "string") return val.substring(0, 10);
-  if (val.toDate && typeof val.toDate === "function") {
-    return val.toDate().toISOString().substring(0, 10);
-  }
-  if (val instanceof Date) {
-    return val.toISOString().substring(0, 10);
-  }
-  return "";
-}
+const CRM_BASE_URL = "https://charbela-crm.firebaseapp.com";
 
 /**
  * CREAR PEDIDO NUEVO DESDE EL CHAT
@@ -78,10 +71,12 @@ export async function createOrderFromAgent({
   const saldoPendiente = Math.max(0, totalCalculado - abonoNum);
   const estadoInicial = abonoNum >= totalCalculado ? "confirmado" : (abonoNum > 0 ? "en_preparacion" : "pendiente");
 
+  const fechaNorm = normalizeEcuadorDate(fechaEntrega);
+
   const orderData = {
     clienteNombre: clienteNombre.trim(),
     clienteTelefono: (clienteTelefono || "").trim(),
-    fechaEnvio: fechaEntrega.trim(),
+    fechaEnvio: fechaNorm,
     horaEntrega: horaEntrega.trim(),
     metodoEntrega: metodoEntrega.trim(),
     direccionEntrega: direccionEntrega.trim(),
@@ -111,7 +106,7 @@ export async function createOrderFromAgent({
       metodoPago: metodoPagoAbono || "Efectivo",
       nota: "Abono inicial registrado vía Claude Desktop MCP",
       createdAt: Timestamp.now(),
-      fecha: fechaEntrega.trim()
+      fecha: fechaNorm
     });
     abonoId = abonoRef.id;
   }
@@ -193,7 +188,7 @@ export async function updateOrderDetailsFromAgent({
   }
 
   const updates = { updatedAt: Timestamp.now() };
-  if (fechaEntrega) updates.fechaEnvio = fechaEntrega.trim();
+  if (fechaEntrega) updates.fechaEnvio = normalizeEcuadorDate(fechaEntrega);
   if (horaEntrega) updates.horaEntrega = horaEntrega.trim();
   if (notas !== undefined) updates.notas = (notas || "").trim();
   if (direccionEntrega) updates.direccionEntrega = direccionEntrega.trim();
@@ -280,7 +275,7 @@ async function buildFullOrderReport(p) {
       historialAbonos: listaAbonos.map(a => ({
         monto: parseFloat(a.monto || 0).toFixed(2),
         metodo: a.metodoPago || "Transferencia",
-        fecha: toDateStr(a.fecha || a.createdAt),
+        fecha: normalizeEcuadorDate(a.fecha || a.createdAt),
         nota: a.nota || ""
       }))
     },
@@ -303,7 +298,7 @@ export async function searchOrdersDetailed({ queryText, estado, fecha, maxResult
 
   for (const doc of snap.docs) {
     const p = { id: doc.id, ...doc.data() };
-    const fStr = toDateStr(p.fechaEnvio || p.createdAt);
+    const fStr = normalizeEcuadorDate(p.fechaEnvio || p.createdAt);
 
     if (fecha && fStr !== fecha) continue;
     if (estado && (p.estado || "").toLowerCase() !== estado.toLowerCase()) continue;
@@ -350,7 +345,7 @@ export async function searchOrdersDetailed({ queryText, estado, fecha, maxResult
  * CONSULTA DE AGENDA DEL OBRADOR EN TEXTO ESTRUCTURADO (PRODUCCIÓN REAL)
  */
 export async function getObradorAgendaFull({ fecha } = {}) {
-  const targetDate = fecha || new Date().toISOString().substring(0, 10);
+  const targetDate = fecha ? normalizeEcuadorDate(fecha) : getEcuadorToday();
   const snap = await getDocs(query(collection(db, "pedidos"), orderBy("fechaEnvio", "asc"), limit(150)));
 
   const pedidosDia = [];
@@ -364,7 +359,7 @@ export async function getObradorAgendaFull({ fecha } = {}) {
 
   for (const doc of snap.docs) {
     const p = { id: doc.id, ...doc.data() };
-    const fStr = toDateStr(p.fechaEnvio || p.createdAt);
+    const fStr = normalizeEcuadorDate(p.fechaEnvio || p.createdAt);
 
     if (fStr === targetDate) {
       const items = (p.items || p.cart || []).map(i => {
