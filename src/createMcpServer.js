@@ -196,7 +196,8 @@ export function createCharbelaMcpServer() {
       numeroComprobante: z.string().optional().describe("Número de factura física o autorización"),
       referenciaBancaria: z.string().optional().describe("Código único de transferencia bancaria"),
       banco: z.string().optional().describe("Banco emisor (ej. Pichincha, Guayaquil, Produbanco)"),
-      comprobanteUrl: z.string().optional().describe("URL de imagen de la captura del recibo si aplica")
+      comprobanteUrl: z.string().optional().describe("URL de imagen de la captura del recibo si aplica"),
+      comprobanteBase64: z.string().optional().describe("Imagen del comprobante en Base64 para subir automáticamente a Firebase Storage y adjuntar al gasto")
     },
     async (args) => runWithTelemetry("registrar_gasto_comprobante", args, () => registerExpenseWithReceipt(args))
   );
@@ -293,7 +294,9 @@ export function createCharbelaMcpServer() {
         proveedor: z.string().optional().describe("Nuevo nombre de proveedor"),
         categoria: z.string().optional().describe("Nueva categoría contable"),
         metodoPago: z.string().optional().describe("Nuevo método de pago"),
-        referenciaBancaria: z.string().optional().describe("Nueva referencia de transferencia")
+        referenciaBancaria: z.string().optional().describe("Nueva referencia de transferencia"),
+        comprobanteUrl: z.string().optional().describe("Nueva URL del comprobante/factura"),
+        comprobanteBase64: z.string().optional().describe("Imagen en Base64 para subir automáticamente a Firebase Storage y asociar al gasto")
       }).describe("Campos específicos a actualizar")
     },
     async (args) => runWithTelemetry("modificar_gasto", args, () => modifyExpense(args))

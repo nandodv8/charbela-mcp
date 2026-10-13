@@ -2,7 +2,7 @@
 // Auditoría de Gastos Duplicados, Limpieza, Modificación Quirúrgica y Exploración
 // Creado bajo los lineamientos de Controller (Dana) y Backend Architect
 
-import { db } from "../firebase.js";
+import { db, storage } from "../firebase.js";
 import {
   collection,
   getDocs,
@@ -15,6 +15,7 @@ import {
   limit,
   Timestamp
 } from "firebase/firestore";
+import { ref, uploadString, getDownloadURL } from "firebase/storage";
 import {
   normalizeEcuadorDate,
   getEcuadorToday,
@@ -477,6 +478,28 @@ export async function modifyExpense({ gastoId, cambios = {} }) {
   if (cambios.categoria) updatePayload.categoria = cambios.categoria.trim();
   if (cambios.metodoPago) updatePayload.metodoPago = cambios.metodoPago.trim();
   if (cambios.referenciaBancaria) updatePayload.referenciaBancaria = cambios.referenciaBancaria.trim();
+
+  if (cambios.comprobanteUrl) {
+    const url = cambios.comprobanteUrl.trim();
+    updatePayload.comprobanteUrl = url;
+    updatePayload.facturaUrl = url;
+    updatePayload.tieneComprobante = true;
+  }
+
+  if (cambios.comprobanteBase64) {
+    try {
+      const fileName = `gastos/${Date.now()}_comprobante.jpg`;
+      const storageRef = ref(storage, fileName);
+      const cleanBase64 = cambios.comprobanteBase64.includes(",") ? cambios.comprobanteBase64 : `data:image/jpeg;base64,${cambios.comprobanteBase64}`;
+      await uploadString(storageRef, cleanBase64, "data_url");
+      const url = await getDownloadURL(storageRef);
+      updatePayload.comprobanteUrl = url;
+      updatePayload.facturaUrl = url;
+      updatePayload.tieneComprobante = true;
+    } catch (e) {
+      console.warn("No se pudo subir comprobante en modifyExpense:", e.message);
+    }
+  }
 
   if (cambios.fecha) {
     const fNorm = normalizeEcuadorDate(cambios.fecha);
