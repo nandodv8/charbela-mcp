@@ -100,7 +100,7 @@ if ! mkdir -p "$CONFIG_DIR"; then
   mal "No pude crear la carpeta de configuración: $CONFIG_DIR"
   exit 1
 fi
-if ! "$NODE_BIN" "$DIR/configurar_claude.mjs" "$CONFIG_FILE" "$NODE_BIN" "$DIR/src/index.js"; then
+if ! "$NODE_BIN" "$DIR/configurar_claude.mjs" "$CONFIG_FILE" "$NODE_BIN" "$DIR/src/bridge.js"; then
   mal "No pude escribir la configuración de Claude."
   exit 1
 fi
@@ -109,7 +109,7 @@ echo
 
 # ─── 5. Verificación real ────────────────────────────────────────────────────
 echo "[5/5] Probando que el servidor arranque y responda…"
-if "$NODE_BIN" "$DIR/verificar_mcp.mjs" "$NODE_BIN" "$DIR/src/index.js"; then
+if "$NODE_BIN" "$DIR/verificar_mcp.mjs" "$NODE_BIN" "$DIR/src/bridge.js"; then
   ok "El servidor responde correctamente"
 else
   echo
