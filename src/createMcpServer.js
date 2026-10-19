@@ -46,6 +46,38 @@ import {
   listExpenses
 } from "./services/expenseDuplicateService.js";
 
+import {
+  getProduccionSemanal,
+  getHistoricoProduccion
+} from "./services/produccionService.js";
+
+import {
+  getNominaPersonal,
+  getAsistenciaFichajes,
+  getLiquidacionQuincena
+} from "./services/nominaService.js";
+
+import {
+  getCatalogoRecetas,
+  getRecetaDetalle,
+  getInsumosPrecios
+} from "./services/recetasService.js";
+
+import {
+  getPedidosWebPorRevisar,
+  getMetricasPipeline,
+  getCarteraPorCobrar
+} from "./services/ventasPipelineService.js";
+
+import {
+  getPerfilClienteCompleto,
+  buscarClientes
+} from "./services/clientesCrmService.js";
+
+import {
+  getBitacoraKaizen
+} from "./services/calidadKaizenService.js";
+
 /**
  * Envoltorio con telemetría integrada y manejo de errores
  */
@@ -455,7 +487,167 @@ export function createCharbelaMcpServer() {
   );
 
   // ============================================================================
-  // 5. RECURSO DE MEMORIA OPERATIVA
+  // 6. OBRADOR & PRODUCCIÓN SEMANAL DETALLADA (JERARQUÍA 1.1 A 1.4)
+  // ============================================================================
+
+  server.tool(
+    "consultar_produccion_semanal",
+    "Genera el plan de producción consolidado de la semana clasificando ítems en las 4 familias oficiales del Obrador (1.1 Bocaditos Tradicionales, 1.2 Bocaditos Decorados, 1.3 Dulces Decorados y 1.4 Masas de Tortas) con cronograma diario y horas de entrega.",
+    {
+      fechaInicio: z.string().optional().describe("Fecha inicial en formato YYYY-MM-DD (ej. Lunes)"),
+      fechaFin: z.string().optional().describe("Fecha final en formato YYYY-MM-DD (ej. Domingo)"),
+      fechaReferencia: z.string().optional().describe("Cualquier fecha dentro de la semana a consultar (por defecto calcula la semana actual)")
+    },
+    async (args) => runWithTelemetry("consultar_produccion_semanal", args, () => getProduccionSemanal(args))
+  );
+
+  server.tool(
+    "consultar_historico_produccion",
+    "Busca en el histórico de pedidos terminados, entregados o archivados del Obrador.",
+    {
+      queryText: z.string().optional().describe("Nombre de cliente, ID de pedido o nota de diseño"),
+      limite: z.number().default(20).describe("Límite de resultados")
+    },
+    async (args) => runWithTelemetry("consultar_historico_produccion", args, () => getHistoricoProduccion(args))
+  );
+
+  // ============================================================================
+  // 7. NÓMINA, ASISTENCIAS Y ROLES DE PAGO
+  // ============================================================================
+
+  server.tool(
+    "consultar_nomina_personal",
+    "Lista el equipo de colaboradores de Charbela con sus cargos, sueldos base, tipo de pago (fijo/por día), afiliación al IESS y costo total estimado de nómina mensual.",
+    {
+      soloActivos: z.boolean().default(true).describe("Si es true, filtra solo colaboradores activos")
+    },
+    async (args) => runWithTelemetry("consultar_nomina_personal", args, () => getNominaPersonal(args))
+  );
+
+  server.tool(
+    "consultar_marcaciones_asistencia",
+    "Consulta las marcaciones del reloj checador (fichajes de entrada y salida, atrasos, horas extras y notas operativas) por fecha o colaborador.",
+    {
+      fecha: z.string().optional().describe("Fecha específica en formato YYYY-MM-DD"),
+      empleadoId: z.string().optional().describe("ID del colaborador"),
+      limite: z.number().default(30).describe("Límite de registros")
+    },
+    async (args) => runWithTelemetry("consultar_marcaciones_asistencia", args, () => getAsistenciaFichajes(args))
+  );
+
+  server.tool(
+    "consultar_liquidacion_quincena",
+    "Consulta las liquidaciones quincenales desembolsadas a los colaboradores, incluyendo deducciones de aporte al IESS y anticipos.",
+    {
+      mes: z.string().optional().describe("Mes contable en formato YYYY-MM (ej. '2026-10')"),
+      periodoQuincena: z.enum(["q1", "q2"]).optional().describe("Primera quincena ('q1') o segunda quincena ('q2')")
+    },
+    async (args) => runWithTelemetry("consultar_liquidacion_quincena", args, () => getLiquidacionQuincena(args))
+  );
+
+  // ============================================================================
+  // 8. RECETAS, SUBRECETAS E INSUMOS (ANÁLISIS DE COGS)
+  // ============================================================================
+
+  server.tool(
+    "consultar_recetas_costos",
+    "Lista el catálogo de recetas del obrador con cálculo de costo total de insumos, rendimiento en porciones/gramos, COGS unitario y margen de ganancia sugerido.",
+    {
+      categoria: z.string().optional().describe("Filtrar por categoría (ej. 'Pastelería', 'Bocaditos', 'Bases')"),
+      buscar: z.string().optional().describe("Término de búsqueda por nombre")
+    },
+    async (args) => runWithTelemetry("consultar_recetas_costos", args, () => getCatalogoRecetas(args))
+  );
+
+  server.tool(
+    "consultar_receta_detalle",
+    "Ficha técnica completa de una receta: lista de ingredientes, subrecetas vinculadas, costos por etapa, procedimiento de elaboración y puntos críticos de calidad.",
+    {
+      recetaId: z.string().optional().describe("ID de la receta en Firestore"),
+      nombre: z.string().optional().describe("Nombre o aproximación de la receta")
+    },
+    async (args) => runWithTelemetry("consultar_receta_detalle", args, () => getRecetaDetalle(args))
+  );
+
+  server.tool(
+    "consultar_insumos_precios",
+    "Consulta el maestro de materias primas e insumos con costos de adquisición, presentación de empaque y proveedores principales.",
+    {
+      buscar: z.string().optional().describe("Buscar por nombre de insumo o proveedor")
+    },
+    async (args) => runWithTelemetry("consultar_insumos_precios", args, () => getInsumosPrecios(args))
+  );
+
+  // ============================================================================
+  // 9. VENTAS, PIPELINE Y CARTERA POR COBRAR
+  // ============================================================================
+
+  server.tool(
+    "consultar_pedidos_pendientes_revision",
+    "Alerta y detalle de pedidos ingresados desde la tienda web / WooCommerce pagados online que están pendientes de revisión por Ventas (para verificar sabores, empaque o entrega).",
+    {},
+    async () => runWithTelemetry("consultar_pedidos_pendientes_revision", {}, () => getPedidosWebPorRevisar())
+  );
+
+  server.tool(
+    "consultar_metricas_pipeline",
+    "Resumen ejecutivo del pipeline comercial: volumen de pedidos en Borrador, Enviada, Aprobada, tasa de conversión y ventas totales del mes.",
+    {},
+    async () => runWithTelemetry("consultar_metricas_pipeline", {}, () => getMetricasPipeline())
+  );
+
+  server.tool(
+    "consultar_cartera_por_cobrar",
+    "Consulta todos los pedidos activos o entregados que mantienen saldo pendiente por cobrar, con cliente, teléfono y fecha de entrega.",
+    {
+      limite: z.number().optional().describe("Máximo de pedidos a listar")
+    },
+    async (args) => runWithTelemetry("consultar_cartera_por_cobrar", args, () => getCarteraPorCobrar(args))
+  );
+
+  // ============================================================================
+  // 10. CLIENTES, PERFIL 360 Y FIDELIZACIÓN CRM
+  // ============================================================================
+
+  server.tool(
+    "consultar_perfil_cliente",
+    "Perfil 360 integral de un cliente: teléfonos, direcciones registradas, historial de pedidos, valor acumulado de vida (LTV), tier de fidelidad y preferencias.",
+    {
+      clienteId: z.string().optional().describe("ID del cliente en Firestore"),
+      telefono: z.string().optional().describe("Número de WhatsApp o teléfono"),
+      email: z.string().optional().describe("Correo electrónico"),
+      nombre: z.string().optional().describe("Nombre del cliente")
+    },
+    async (args) => runWithTelemetry("consultar_perfil_cliente", args, () => getPerfilClienteCompleto(args))
+  );
+
+  server.tool(
+    "buscar_clientes_directorio",
+    "Busca clientes en el directorio CRM filtrando por nombre, teléfono, correo o nivel de lealtad (tier).",
+    {
+      queryText: z.string().optional().describe("Texto de búsqueda"),
+      tier: z.string().optional().describe("Filtrar por nivel (ej. 'Oro', 'Plata', 'Bronce')"),
+      limite: z.number().default(15).describe("Límite de clientes")
+    },
+    async (args) => runWithTelemetry("buscar_clientes_directorio", args, () => buscarClientes(args))
+  );
+
+  // ============================================================================
+  // 11. CALIDAD Y MEJORA KAIZEN
+  // ============================================================================
+
+  server.tool(
+    "consultar_bitacora_kaizen",
+    "Consulta el registro de incidencias de calidad, causas raíz analizadas y acciones de mejora continua en Obrador.",
+    {
+      proceso: z.string().optional().describe("Código de proceso (ej. 'HORNEO', 'DECORACION', 'DESPACHO')"),
+      limite: z.number().default(20).describe("Límite de incidencias a listar")
+    },
+    async (args) => runWithTelemetry("consultar_bitacora_kaizen", args, () => getBitacoraKaizen(args))
+  );
+
+  // ============================================================================
+  // 12. RECURSO DE MEMORIA OPERATIVA
   // ============================================================================
 
   server.resource(
@@ -477,3 +669,4 @@ export function createCharbelaMcpServer() {
 
   return server;
 }
+
