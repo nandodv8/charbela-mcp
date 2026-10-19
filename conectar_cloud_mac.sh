@@ -1,10 +1,10 @@
 #!/bin/bash
-# conectar_cloud_mac.sh — Conecta Claude Desktop en Mac al MCP en Cloud Run
+# conectar_cloud_mac.sh — Conecta Claude Desktop / Cowork en Mac al MCP en Cloud Run con OAuth Google
 
 set -e
 
 echo "=============================================================="
-echo "  🍰 Conectando Claude Desktop a Charbela MCP Cloud Run"
+echo "  🍰 Conectando Claude Desktop a Charbela Pastelería MCP"
 echo "=============================================================="
 echo
 
@@ -33,9 +33,7 @@ data.mcpServers["charbela-crm"] = {
   args: [
     "-y",
     "mcp-remote",
-    "https://charbela-mcp-775456671841.us-central1.run.app/sse",
-    "--header",
-    "X-Charbela-Key: charbela_crm_mcp_2026_sec_key"
+    "https://charbela-mcp-775456671841.us-central1.run.app/mcp"
   ]
 };
 
@@ -46,11 +44,13 @@ echo "  ✅ Archivo de configuración actualizado en:"
 echo "     $CONFIG_FILE"
 echo
 echo "=============================================================="
-echo "  🎉 ¡CONECTADO CON ÉXITO A CLOUD RUN!"
+echo "  🎉 ¡CONFIGURADO CON ÉXITO!"
 echo "=============================================================="
-echo "  Último paso:"
-echo "    1. En tu Mac, cierra Claude por completo con: Cmd + Q"
-echo "    2. Vuelve a abrir la aplicación Claude."
-echo "    3. ¡Listo! Ya tienes todas las 18 herramientas conectadas."
+echo "  Pasos finales:"
+echo "    1. Cierra Claude Desktop por completo con: Cmd + Q"
+echo "    2. Vuelve a abrir Claude."
+echo "    3. Al iniciar, se abrirá la ventana de inicio de sesión con Google."
+echo "    4. Haz clic en 'Continuar con Google' e ingresa con tu cuenta de Charbela."
+echo "    5. ¡Listo! Tendrás acceso a todos los módulos: Obrador, Nómina, Recetas, Ventas y Finanzas."
 echo "=============================================================="
 echo
