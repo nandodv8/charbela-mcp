@@ -78,6 +78,13 @@ import {
   getBitacoraKaizen
 } from "./services/calidadKaizenService.js";
 
+import {
+  reportarMejoraOBug,
+  consultarMejorasYBugs,
+  actualizarEstadoMejoraBug,
+  generarEnlaceCrm
+} from "./services/feedbackMejorasService.js";
+
 /**
  * Envoltorio con telemetría integrada y manejo de errores
  */
@@ -277,7 +284,7 @@ export function createCharbelaMcpServer() {
 
   server.tool(
     "consultar_gastos_sin_comprobante",
-    "Auditoría preventiva: Lista gastos registrados en el CRM que carecen de soporte documental. DIRECTIVA: Si detectas egresos fuertes sin comprobante (> $50) o hay 'observacionesParaFernando', explica el impacto en lenguaje sencillo a Charbela y genera SIEMPRE al final la tarjeta lista para copiar '📌 Mensaje para Fernando (puedes copiarle esto):' alertando sobre la deducibilidad ante el SRI.",
+    "Auditoría preventiva: Lista gastos registrados en el CRM que aún no tienen comprobante o número de autorización asociado.",
     {
       limite: z.number().default(15).describe("Máximo de gastos a auditar")
     },
@@ -286,7 +293,7 @@ export function createCharbelaMcpServer() {
 
   server.tool(
     "detectar_gastos_duplicados",
-    "Audita los gastos registrados en el CRM para detectar registros duplicados con protección estricta contra falsos positivos en nómina y choferes. DIRECTIVA: Si se detectan duplicados o hay 'observacionesParaFernando', presenta las opciones con claridad y genera al final la tarjeta lista para copiar '📌 Mensaje para Fernando (puedes copiarle esto):' para que Charbela le consulte antes de borrar registros en lote.",
+    "Audita los gastos registrados en el CRM para detectar registros duplicados (por misma referencia bancaria o por coincidencia de monto y fecha cercana), recomendando cuál conservar.",
     {
       mes: z.string().optional().describe("Mes a auditar en formato YYYY-MM (ej. '2026-10'). Si no se indica, audita los últimos 250 gastos."),
       toleranciaDias: z.number().default(1).describe("Tolerancia máxima en días de diferencia entre fechas con mismo monto (por defecto 1 día).")
@@ -386,69 +393,13 @@ export function createCharbelaMcpServer() {
 
   server.tool(
     "consultar_finanzas_resumen",
-    "Genera un estado financiero P&L conversacional del periodo: total vendido, cobrado en caja, gastos por categoría, margen neto y cuentas por cobrar. DIRECTIVA DE RESPUESTA: Si el resultado incluye 'observacionesParaFernando' o detectas anomalías contables (ej. cuota hipotecaria completa en OPEX, COGS bajo <20%) o tributarias (SRI), explica el resumen a Charbela en lenguaje sencillo y genera SIEMPRE al final el bloque destacado: '📌 Mensaje para Fernando (puedes copiarle esto):' listo para enviar por WhatsApp.",
+    "Genera un estado financiero P&L conversacional del periodo: total vendido, cobrado en caja, gastos por categoría, margen neto y cuentas por cobrar.",
     {
       fechaInicio: z.string().optional().describe("Fecha de inicio en formato YYYY-MM-DD"),
       fechaFin: z.string().optional().describe("Fecha de fin en formato YYYY-MM-DD"),
       mes: z.string().optional().describe("Mes a consultar en formato YYYY-MM (ej. '2026-10')")
     },
     async (args) => runWithTelemetry("consultar_finanzas_resumen", args, () => getFinancialSummaryConversational(args))
-  );
-
-  server.tool(
-    "generar_reporte_auditoria_fernando",
-    "Genera un informe integral de auditoría y oportunidades de mejora detectadas en el CRM y finanzas (cuotas de hipoteca/préstamo en OPEX, COGS bajo, egresos sin factura SRI, duplicados), con una tarjeta lista para que Charbela copie y reenvíe a Fernando por WhatsApp.",
-    {
-      mes: z.string().optional().describe("Mes contable a auditar en formato YYYY-MM (ej. '2026-09' o '2026-10')")
-    },
-    async (args) => runWithTelemetry("generar_reporte_auditoria_fernando", args, async () => {
-      const [finanzas, duplicados, sinComprobante] = await Promise.all([
-        getFinancialSummaryConversational(args),
-        detectDuplicateExpenses(args),
-        getExpensesWithoutReceipts({ limite: 15 })
-      ]);
-
-      const itemsAlertas = [];
-      if (finanzas.observacionesParaFernando?.items?.length) {
-        itemsAlertas.push(...finanzas.observacionesParaFernando.items);
-      }
-
-      const lineasParaCopiar = [];
-      if (finanzas.observacionesParaFernando?.tarjetaParaCopiar) {
-        lineasParaCopiar.push(finanzas.observacionesParaFernando.tarjetaParaCopiar);
-      }
-      if (duplicados.observacionesParaFernando?.tarjetaParaCopiar) {
-        lineasParaCopiar.push(duplicados.observacionesParaFernando.tarjetaParaCopiar);
-      }
-      if (sinComprobante.observacionesParaFernando?.tarjetaParaCopiar) {
-        lineasParaCopiar.push(sinComprobante.observacionesParaFernando.tarjetaParaCopiar);
-      }
-
-      return {
-        periodo: finanzas.periodo,
-        resumenEjecutivo: finanzas.resumenEjecutivo,
-        criterioDevengado: finanzas.criterioDevengado,
-        criterioFlujoDeCaja: finanzas.criterioFlujoDeCaja,
-        totalAlertasDetectadas: itemsAlertas.length + (duplicados.totalRegistrosDuplicadosParaEliminar > 0 ? 1 : 0) + (sinComprobante.totalGastosSinComprobante > 0 ? 1 : 0),
-        alertasFinancieras: finanzas.observacionesParaFernando,
-        alertasDuplicados: duplicados.observacionesParaFernando,
-        alertasComprobantes: sinComprobante.observacionesParaFernando,
-        tarjetaConsolidadaParaWhatsApp: lineasParaCopiar.length > 0
-          ? [
-              `📌 **Reporte Consolidado de Mejoras para Fernando (${finanzas.periodo}):**`,
-              `> Hola Fer, te paso el resumen de puntos detectados por el sistema para tu revisión:`,
-              itemsAlertas.map(it => `> • *${it.titulo}:* ${it.detalle} (Acción sugerida: ${it.accionSugerida})`).join("\n"),
-              duplicados.totalRegistrosDuplicadosParaEliminar > 0
-                ? `> • *Duplicados:* ${duplicados.totalRegistrosDuplicadosParaEliminar} registros repetidos por $${duplicados.montoTotalInfladoPorDuplicados}.`
-                : null,
-              sinComprobante.totalGastosSinComprobante > 0
-                ? `> • *Comprobantes:* ${sinComprobante.totalGastosSinComprobante} egresos sin soporte tributario.`
-                : null,
-              `> Quedo atenta a lo que me indiques para proceder en el CRM.`
-            ].filter(Boolean).join("\n")
-          : "✅ Finanzas y registros limpios. No se detectaron anomalías ni mejoras pendientes para Fernando."
-      };
-    })
   );
 
   server.tool(
@@ -647,7 +598,60 @@ export function createCharbelaMcpServer() {
   );
 
   // ============================================================================
-  // 12. RECURSO DE MEMORIA OPERATIVA
+  // 12. GESTIÓN DE MEJORAS, BUGS, ADECUACIONES Y ENLACES DIRECTOS CRM
+  // ============================================================================
+
+  server.tool(
+    "reportar_mejora_o_bug",
+    "Registra un bug, adecuación, mejora o pulido directamente en la sección de feedback del CRM para que el equipo técnico lo procese. Devuelve el enlace directo al módulo afectado.",
+    {
+      tipo: z.enum(["Bug", "Mejora", "Adecuacion", "Pulido", "Idea"]).default("Mejora").describe("Tipo de reporte"),
+      titulo: z.string().describe("Título corto de la mejora o problema"),
+      descripcion: z.string().describe("Detalle de qué se requiere cambiar, pulir o qué falló"),
+      modulo: z.enum(["Ventas", "Obrador", "Personal", "Finanzas", "Calidad", "Catálogo", "General"]).default("General").describe("Módulo del CRM afectado"),
+      gravedad: z.enum(["Bloqueante", "Alto", "Medio", "Leve"]).default("Medio").describe("Nivel de urgencia"),
+      orderId: z.string().optional().describe("ID de pedido relacionado si aplica"),
+      reportadoPor: z.string().optional().describe("Nombre o correo de quien solicita la mejora (ej. Charbela, Gladys, Fer)")
+    },
+    async (args) => runWithTelemetry("reportar_mejora_o_bug", args, () => reportarMejoraOBug(args))
+  );
+
+  server.tool(
+    "consultar_mejoras_y_bugs",
+    "Consulta la lista de requerimientos, adecuaciones, pulidos y bugs reportados en el CRM, filtrando por estado, módulo o tipo.",
+    {
+      estado: z.enum(["Pendiente", "En Proceso", "Resuelto", "Archivado", "Todos"]).default("Pendiente").describe("Estado del reporte"),
+      modulo: z.string().optional().describe("Filtrar por módulo (ej. 'Ventas', 'Obrador', 'Personal', 'Finanzas')"),
+      tipo: z.string().optional().describe("Filtrar por tipo (ej. 'Bug', 'Mejora', 'Pulido')"),
+      limite: z.number().default(20).describe("Límite de registros a retornar")
+    },
+    async (args) => runWithTelemetry("consultar_mejoras_y_bugs", args, () => consultarMejorasYBugs(args))
+  );
+
+  server.tool(
+    "actualizar_estado_mejora_bug",
+    "Actualiza el estado de una mejora o bug en el CRM (marcar como 'En Proceso', 'Resuelto', 'Archivado') con notas de resolución.",
+    {
+      feedbackId: z.string().describe("ID del reporte en Firestore"),
+      nuevoEstado: z.enum(["Pendiente", "En Proceso", "Resuelto", "Archivado"]).describe("Nuevo estado del ítem"),
+      resolucion: z.string().optional().describe("Explicación de la solución o cambio implementado"),
+      comoVerificar: z.string().optional().describe("Pasos para que Charbela o el usuario verifiquen el cambio")
+    },
+    async (args) => runWithTelemetry("actualizar_estado_mejora_bug", args, () => actualizarEstadoMejoraBug(args))
+  );
+
+  server.tool(
+    "generar_enlace_crm",
+    "Genera enlaces web listos para hacer clic hacia cualquier sección o pedido específico de Charbela CRM (portal de cliente, ventas, obrador, nómina, finanzas, etc.).",
+    {
+      modulo: z.enum(["ventas", "obrador", "nomina", "finanzas", "calidad", "clientes", "portal_cliente", "portal_feedback"]).describe("Módulo o vista a enlazar"),
+      id: z.string().optional().describe("ID del pedido o entidad para enlace directo")
+    },
+    async (args) => runWithTelemetry("generar_enlace_crm", args, () => generarEnlaceCrm(args))
+  );
+
+  // ============================================================================
+  // 13. RECURSO DE MEMORIA OPERATIVA
   // ============================================================================
 
   server.resource(

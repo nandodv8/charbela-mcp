@@ -126,7 +126,11 @@ export async function createOrderFromAgent({
       saldoPendiente: saldoPendiente.toFixed(2),
       estado: estadoInicial,
       items: itemsList,
-      abonoId
+      abonoId,
+      enlaces: {
+        crmVentas: `https://crm.charbelapasteleria.com/ventas?orderId=${orderId}`,
+        portalCliente: `https://crm.charbelapasteleria.com/c/${orderId}`
+      }
     }
   };
 }
@@ -254,13 +258,19 @@ async function buildFullOrderReport(p) {
   return {
     encontrado: true,
     pedidoId: p.id,
+    displayId: p.displayId || p.id.slice(-6),
+    enlaces: {
+      crmVentas: `https://crm.charbelapasteleria.com/ventas?orderId=${p.id}`,
+      portalCliente: `https://crm.charbelapasteleria.com/c/${p.id}`,
+      obradorProduccion: `https://crm.charbelapasteleria.com/produccion?orderId=${p.id}`
+    },
     cliente: {
       nombre: p.clienteNombre || "Sin nombre",
       telefono: p.clienteTelefono || "Sin teléfono registrado",
       direccion: p.direccionEntrega || "Retiro en local"
     },
     entrega: {
-      fecha: normalizeEcuadorDate(p.fechaEnvio || p.createdAt),
+      fecha: toDateStr(p.fechaEnvio || p.createdAt),
       hora: p.horaEntrega || p.hora || "No especificada",
       metodo: p.metodoEntrega || (p.costoDelivery > 0 ? "Entrega a Domicilio" : "Retiro en Obrador"),
       chofer: p.choferNombre || "No asignado",
@@ -328,6 +338,8 @@ export async function searchOrdersDetailed({ queryText, estado, fecha, maxResult
       estado: p.estado || "pendiente",
       total: total.toFixed(2),
       saldoPendiente: saldo.toFixed(2),
+      enlaceCrm: `https://crm.charbelapasteleria.com/ventas?orderId=${p.id}`,
+      enlaceCliente: `https://crm.charbelapasteleria.com/c/${p.id}`,
       productosResumen: (p.items || p.cart || []).map(i => `${i.cantidad || 1}x ${i.nombre || i.name || "Item"}`).join(", "),
       notas: p.notas || ""
     });
