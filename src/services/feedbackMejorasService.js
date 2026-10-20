@@ -2,7 +2,8 @@
 // Servicio MCP para Receptación y Gestión de Bugs, Mejoras, Adecuaciones y Deep-Linking en Charbela CRM
 
 import { db } from "../firebase.js";
-import { collection, addDoc, getDocs, doc, updateDoc, query, where, orderBy, limit as firestoreLimit } from "firebase/firestore";
+import { collection, addDoc, getDocs, getDoc, doc, updateDoc, query, where, orderBy, limit as firestoreLimit } from "firebase/firestore";
+import { uploadAttachmentToStorage } from "./storageUploadService.js";
 
 const CRM_BASE_URL = process.env.CRM_PUBLIC_URL || "https://crm.charbelapasteleria.com";
 
@@ -56,10 +57,27 @@ export async function reportarMejoraOBug(args) {
     orderId = "",
     displayId = "",
     clienteNombre = "",
-    reportadoPor = "Agente Claude / Charbela MCP"
+    reportadoPor = "Agente Claude / Charbela MCP",
+    capturaBase64 = null,
+    capturaUrl = null
   } = args;
 
   const descCompleta = titulo ? `[${titulo}]\n${descripcion}` : descripcion;
+
+  let screenshotUrl = "";
+  if (capturaBase64 || capturaUrl) {
+    try {
+      const uploadRes = await uploadAttachmentToStorage({
+        base64: capturaBase64,
+        url: capturaUrl,
+        folder: "vibe_feedback_screenshots",
+        prefix: `bug_${modulo.toLowerCase()}`
+      });
+      screenshotUrl = uploadRes.downloadUrl;
+    } catch (err) {
+      console.warn("No se pudo subir la captura de feedback:", err.message);
+    }
+  }
 
   const docData = {
     tipo,
@@ -69,6 +87,7 @@ export async function reportarMejoraOBug(args) {
     displayId: displayId || "",
     clienteNombre: clienteNombre || "",
     descripcion: descCompleta,
+    screenshotUrl: screenshotUrl || "",
     userEmail: reportadoPor,
     estado: "Pendiente", // 'Pendiente' | 'En Proceso' | 'Resuelto' | 'Archivado'
     resolucion: "",
@@ -83,11 +102,55 @@ export async function reportarMejoraOBug(args) {
   return {
     success: true,
     feedbackId: docRef.id,
-    mensaje: `Se ha registrado el ítem de ${tipo} exitosamente en la sección de Mejoras y Feedback del CRM.`,
+    mensaje: `Se ha registrado el ítem de ${tipo} exitosamente en la sección de Mejoras y Feedback del CRM.${screenshotUrl ? ' Se adjuntó la captura de pantalla.' : ''}`,
     estado: "Pendiente",
     modulo,
     gravedad,
+    capturaUrl: screenshotUrl || null,
     enlaceCrm: linkModulo
+  };
+}
+
+/**
+ * Adjunta una captura de pantalla a un reporte existente de mejora o bug
+ */
+export async function adjuntarCapturaMejoraBug({ feedbackId, capturaBase64, capturaUrl }) {
+  if (!feedbackId || !String(feedbackId).trim()) {
+    throw new Error("Debes indicar el ID del reporte de feedback.");
+  }
+  if (!capturaBase64 && !capturaUrl) {
+    throw new Error("Debes proporcionar la captura en Base64 o URL.");
+  }
+
+  const cleanId = String(feedbackId).trim();
+  const docRef = doc(db, "vibe_feedback", cleanId);
+  const snap = await getDoc(docRef);
+
+  if (!snap.exists()) {
+    throw new Error(`No se encontró el reporte con ID "${cleanId}".`);
+  }
+
+  const uploadRes = await uploadAttachmentToStorage({
+    base64: capturaBase64,
+    url: capturaUrl,
+    folder: "vibe_feedback_screenshots",
+    prefix: `bug_${cleanId.substring(0, 6)}`
+  });
+
+  await updateDoc(docRef, {
+    screenshotUrl: uploadRes.downloadUrl,
+    updatedAt: new Date().toISOString()
+  });
+
+  const data = snap.data();
+  const linkModulo = buildCrmLink((data.modulo || "general").toLowerCase(), data.orderId || "");
+
+  return {
+    success: true,
+    feedbackId: cleanId,
+    screenshotUrl: uploadRes.downloadUrl,
+    enlaceCrm: linkModulo,
+    mensaje: `📸 Captura de pantalla adjuntada exitosamente al reporte #${cleanId}.`
   };
 }
 

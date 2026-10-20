@@ -12,7 +12,9 @@ import {
   getOrderDetailFull,
   searchOrdersDetailed,
   getObradorAgendaFull,
-  upsertClientFromAgent
+  upsertClientFromAgent,
+  attachDesignToOrder,
+  attachPaymentReceiptToOrder
 } from "./services/ordersService.js";
 
 import {
@@ -35,7 +37,8 @@ import {
   parseBankNotificationText,
   reconcileBankStatement,
   batchRegisterExpenses,
-  getExpensesWithoutReceipts
+  getExpensesWithoutReceipts,
+  adjuntarComprobanteGasto
 } from "./services/expenseReceiptService.js";
 
 import {
@@ -82,7 +85,8 @@ import {
   reportarMejoraOBug,
   consultarMejorasYBugs,
   actualizarEstadoMejoraBug,
-  generarEnlaceCrm
+  generarEnlaceCrm,
+  adjuntarCapturaMejoraBug
 } from "./services/feedbackMejorasService.js";
 
 /**
@@ -129,12 +133,12 @@ export function createCharbelaMcpServer() {
   });
 
   // ============================================================================
-  // 1. MUTACIONES PRINCIPALES (CREACIÓN Y EDICIÓN)
+  // 1. MUTACIONES PRINCIPALES (CREACIÓN, EDICIÓN Y ADJUNTOS DE PEDIDOS)
   // ============================================================================
 
   server.tool(
     "crear_pedido",
-    "Registra un nuevo pedido en el CRM con fecha de entrega, sabores, notas, total y anticipo opcional.",
+    "Registra un nuevo pedido en el CRM con fecha de entrega, sabores, notas, total y anticipo opcional. Puede recibir foto de diseño y comprobante de abono de inmediato.",
     {
       clienteNombre: z.string().describe("Nombre de la clienta"),
       clienteTelefono: z.string().describe("Número de WhatsApp o teléfono"),
@@ -148,9 +152,59 @@ export function createCharbelaMcpServer() {
       })).describe("Lista de productos a incluir en el pedido"),
       abonoInicial: z.number().optional().describe("Monto pagado como anticipo/seña"),
       metodoPagoAbono: z.string().optional().describe("Transferencia, Efectivo, Deuna, etc."),
-      notas: z.string().optional().describe("Instrucciones especiales para cocina o entrega")
+      notas: z.string().optional().describe("Instrucciones especiales para cocina o entrega"),
+      fotoDisenoBase64: z.string().optional().describe("Imagen o diseño temático en Base64 o Data URL"),
+      fotoDisenoUrl: z.string().optional().describe("URL pública de la imagen o diseño"),
+      comprobantePagoBase64: z.string().optional().describe("Comprobante del abono inicial en Base64 o Data URL"),
+      comprobantePagoUrl: z.string().optional().describe("URL pública del comprobante del abono inicial"),
+      pautaDiseno: z.any().optional().describe("Pauta técnica de diseño (textoConfirmado, loQueSiLleva, loQueNoLleva, paletaColores)")
     },
     async (args) => runWithTelemetry("crear_pedido", args, () => createOrderFromAgent(args))
+  );
+
+  server.tool(
+    "adjuntar_diseno_pedido",
+    "Adjunta fotos o diseños de referencia y pauta técnica de decoración (dedicatoria literal, paleta de colores, lo que sí/no lleva) a un pedido de Charbela CRM. Aplica a nivel global del pedido (foto temática del evento) o a un ítem individual (torta personalizada, cupcakes, galletas decoradas, bocaditos).",
+    {
+      orderId: z.string().describe("ID del pedido en Firestore o displayId"),
+      imagenBase64: z.string().optional().describe("Imagen o diseño en Base64 o Data URL"),
+      imagenUrl: z.string().optional().describe("URL pública de la imagen de diseño"),
+      esDisenoGlobal: z.boolean().default(true).optional().describe("Si es true, se asigna como diseño general del evento (fotoDisenoEvento). Si es false o se especifica itemIndex/itemNombre, se asigna al producto individual"),
+      itemIndex: z.number().optional().describe("Índice numérico del producto en la lista (0 para el primero, 1 para el segundo, etc.)"),
+      itemNombre: z.string().optional().describe("Nombre o palabra clave del producto a asociar (ej. 'torta', 'galletas', 'cupcakes')"),
+      pautaDiseno: z.object({
+        textoConfirmado: z.union([
+          z.string(),
+          z.object({
+            fraseExacta: z.string().describe("Frase exacta de la dedicatoria letra por letra"),
+            ubicacion: z.string().optional().describe("Ubicación de la frase (ej. 'En disco de azúcar', 'En base', 'En tarjeta')")
+          })
+        ]).optional().describe("Dedicatoria o frase a escribir exactamente"),
+        loQueSiLleva: z.array(z.string()).optional().describe("Lista de elementos obligatorios (ej. ['Flores naturales', 'Perlas doradas'])"),
+        loQueNoLleva: z.array(z.string()).optional().describe("Lista de elementos prohibidos o vetados (ej. ['Frutas ácidas', 'Brillo'])"),
+        paletaColores: z.array(z.string()).optional().describe("Colores confirmados (ej. ['Rosa pastel', 'Dorado', 'Blanco'])"),
+        loQueSiNotas: z.string().optional().describe("Notas adicionales de lo que sí lleva"),
+        loQueNoNotas: z.string().optional().describe("Notas adicionales de advertencia")
+      }).optional().describe("Ficha técnica de diseño para el Obrador y Mesa de Decoración"),
+      tematica: z.string().optional().describe("Temática general del evento (ej. 'Granja Infantil', 'Boda Boho Chic')"),
+      notas: z.string().optional().describe("Instrucciones o notas adicionales de decoración")
+    },
+    async (args) => runWithTelemetry("adjuntar_diseno_pedido", args, () => attachDesignToOrder(args))
+  );
+
+  server.tool(
+    "adjuntar_comprobante_pago_pedido",
+    "Adjunta la captura o foto del comprobante de transferencia bancaria, Deuna o depósito a un pedido en Charbela CRM. Sube el comprobante a Firebase Storage, actualiza comprobanteUrl en el pedido y opcionalmente registra el abono recalculando saldo pendiente y aprobando el pedido.",
+    {
+      orderId: z.string().describe("ID del pedido en Firestore o displayId"),
+      comprobanteBase64: z.string().optional().describe("Captura o comprobante bancario en Base64 o Data URL"),
+      comprobanteUrl: z.string().optional().describe("URL pública del comprobante bancario"),
+      monto: z.number().optional().describe("Monto abonado en dólares USD (si se indica, crea el registro de abono contable)"),
+      metodoPago: z.enum(["Transferencia", "Deuna", "Efectivo", "Tarjeta de Débito", "Tarjeta de Crédito", "Depósito"]).default("Transferencia").optional().describe("Método de pago del comprobante"),
+      banco: z.string().optional().describe("Banco emisor (ej. 'Banco Pichincha', 'Banco Guayaquil', 'Produbanco')"),
+      notas: z.string().optional().describe("Referencia bancaria o nota de la transferencia")
+    },
+    async (args) => runWithTelemetry("adjuntar_comprobante_pago_pedido", args, () => attachPaymentReceiptToOrder(args))
   );
 
   server.tool(
@@ -239,6 +293,17 @@ export function createCharbelaMcpServer() {
       comprobanteBase64: z.string().optional().describe("Imagen del comprobante en Base64 para subir automáticamente a Firebase Storage y adjuntar al gasto")
     },
     async (args) => runWithTelemetry("registrar_gasto_comprobante", args, () => registerExpenseWithReceipt(args))
+  );
+
+  server.tool(
+    "adjuntar_comprobante_gasto",
+    "Adjunta una foto o archivo de comprobante de pago o factura a un gasto contable ya registrado en el CRM.",
+    {
+      gastoId: z.string().describe("ID del gasto en Firestore"),
+      comprobanteBase64: z.string().optional().describe("Comprobante o factura en Base64 o Data URL"),
+      comprobanteUrl: z.string().optional().describe("URL pública de la factura o comprobante")
+    },
+    async (args) => runWithTelemetry("adjuntar_comprobante_gasto", args, () => adjuntarComprobanteGasto(args))
   );
 
   server.tool(
@@ -605,7 +670,7 @@ export function createCharbelaMcpServer() {
 
   server.tool(
     "reportar_mejora_o_bug",
-    "Registra un bug, adecuación, mejora o pulido directamente en la sección de feedback del CRM para que el equipo técnico lo procese. Devuelve el enlace directo al módulo afectado.",
+    "Registra un bug, adecuación, mejora o pulido directamente en la sección de feedback del CRM para que el equipo técnico lo procese. Devuelve el enlace directo al módulo afectado y permite adjuntar captura de pantalla.",
     {
       tipo: z.enum(["Bug", "Mejora", "Adecuacion", "Pulido", "Idea"]).default("Mejora").describe("Tipo de reporte"),
       titulo: z.string().describe("Título corto de la mejora o problema"),
@@ -613,9 +678,22 @@ export function createCharbelaMcpServer() {
       modulo: z.enum(["Ventas", "Obrador", "Personal", "Finanzas", "Calidad", "Catálogo", "General"]).default("General").describe("Módulo del CRM afectado"),
       gravedad: z.enum(["Bloqueante", "Alto", "Medio", "Leve"]).default("Medio").describe("Nivel de urgencia"),
       orderId: z.string().optional().describe("ID de pedido relacionado si aplica"),
-      reportadoPor: z.string().optional().describe("Nombre o correo de quien solicita la mejora (ej. Charbela, Gladys, Fer)")
+      reportadoPor: z.string().optional().describe("Nombre o correo de quien solicita la mejora (ej. Charbela, Gladys, Fer)"),
+      capturaBase64: z.string().optional().describe("Captura de pantalla o imagen de soporte en Base64 o Data URL"),
+      capturaUrl: z.string().optional().describe("URL pública de la captura o mockup de soporte")
     },
     async (args) => runWithTelemetry("reportar_mejora_o_bug", args, () => reportarMejoraOBug(args))
+  );
+
+  server.tool(
+    "adjuntar_captura_mejora_bug",
+    "Adjunta una captura de pantalla, imagen de referencia o mockup a un reporte existente de bug o mejora en vibe_feedback.",
+    {
+      feedbackId: z.string().describe("ID del reporte en Firestore"),
+      capturaBase64: z.string().optional().describe("Captura de pantalla en Base64 o Data URL"),
+      capturaUrl: z.string().optional().describe("URL pública de la captura de pantalla o mockup")
+    },
+    async (args) => runWithTelemetry("adjuntar_captura_mejora_bug", args, () => adjuntarCapturaMejoraBug(args))
   );
 
   server.tool(

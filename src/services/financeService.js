@@ -193,7 +193,7 @@ export async function getFinancialSummaryConversational({ fechaInicio, fechaFin,
 
   // Traer pedidos y gastos del CRM
   const [pedidosSnap, gastosSnap] = await Promise.all([
-    getDocs(query(collection(db, "pedidos"), limit(300))),
+    getDocs(collection(db, "pedidos")),
     getDocs(query(collection(db, "gastos"), where("mesContable", "==", targetMes)))
   ]);
 

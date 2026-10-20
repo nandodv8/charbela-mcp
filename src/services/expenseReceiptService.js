@@ -24,6 +24,8 @@ import {
   getEcuadorMesContable
 } from "../utils/ecuadorDateUtils.js";
 
+import { uploadAttachmentToStorage } from "./storageUploadService.js";
+
 /**
  * Heurística ecuatoriana para inferir la categoría contable de un gasto
  */
@@ -245,17 +247,20 @@ export async function registerExpenseWithReceipt({
     }
   }
 
-  // 2. Subida de imagen a Firebase Storage si se proporcionó base64
-  let finalComprobanteUrl = comprobanteUrl;
-  if (comprobanteBase64 && !finalComprobanteUrl) {
+  // 2. Subida de imagen a Firebase Storage si se proporcionó base64 o URL
+  let finalComprobanteUrl = null;
+  if (comprobanteBase64 || comprobanteUrl) {
     try {
-      const fileName = `gastos/${targetDate}_${Date.now()}_comprobante.jpg`;
-      const storageRef = ref(storage, fileName);
-      const cleanBase64 = comprobanteBase64.includes(",") ? comprobanteBase64 : `data:image/jpeg;base64,${comprobanteBase64}`;
-      await uploadString(storageRef, cleanBase64, "data_url");
-      finalComprobanteUrl = await getDownloadURL(storageRef);
+      const upRes = await uploadAttachmentToStorage({
+        base64: comprobanteBase64,
+        url: comprobanteUrl,
+        folder: "comprobantes",
+        prefix: `gasto_${targetDate}`
+      });
+      finalComprobanteUrl = upRes.downloadUrl;
     } catch (storageErr) {
       console.warn("No se pudo subir a Storage, guardando referencia:", storageErr.message);
+      finalComprobanteUrl = comprobanteUrl || null;
     }
   }
 
@@ -466,5 +471,45 @@ export async function getExpensesWithoutReceipts({ limite = 15 } = {}) {
     mensaje: sinComprobante.length > 0
       ? `Hay ${sinComprobante.length} gastos registrados recientemente que aún no tienen comprobante o número de autorización asociado.`
       : "¡Excelente! Todos los gastos recientes tienen su comprobante o referencia bancaria registrada."
+  };
+}
+
+/**
+ * ADJUNTAR COMPROBANTE O FACTURA A UN GASTO EXISTENTE
+ */
+export async function adjuntarComprobanteGasto({ gastoId, comprobanteBase64, comprobanteUrl }) {
+  if (!gastoId || !String(gastoId).trim()) {
+    throw new Error("Debes indicar el ID del gasto en Firestore.");
+  }
+  if (!comprobanteBase64 && !comprobanteUrl) {
+    throw new Error("Debes proporcionar el comprobante en Base64 o URL.");
+  }
+
+  const cleanId = String(gastoId).trim();
+  const gastoRef = doc(db, "gastos", cleanId);
+  const snap = await getDoc(gastoRef);
+  if (!snap.exists()) {
+    throw new Error(`No se encontró el registro de gasto con ID "${cleanId}".`);
+  }
+
+  const uploadRes = await uploadAttachmentToStorage({
+    base64: comprobanteBase64,
+    url: comprobanteUrl,
+    folder: "comprobantes",
+    prefix: `gasto_${cleanId.substring(0, 6)}`
+  });
+
+  await updateDoc(gastoRef, {
+    comprobanteUrl: uploadRes.downloadUrl,
+    facturaUrl: uploadRes.downloadUrl,
+    tieneComprobante: true,
+    updatedAt: Timestamp.now()
+  });
+
+  return {
+    success: true,
+    gastoId: cleanId,
+    comprobanteUrl: uploadRes.downloadUrl,
+    mensaje: `🧾 Comprobante adjuntado exitosamente al gasto #${cleanId.substring(0, 6)}.`
   };
 }

@@ -12,6 +12,8 @@ import {
 } from "./estados.js";
 import { getEcuadorToday, getEcuadorMesContable } from "../utils/ecuadorDateUtils.js";
 
+const clienteTelefonoCache = new Map();
+
 /**
  * Resuelve el teléfono del cliente: si falta en el pedido, busca en la colección clientes
  */
@@ -20,17 +22,23 @@ async function resolverTelefonoCliente(pedido) {
     return String(pedido.clienteTelefono).trim();
   }
   if (pedido.clienteId) {
+    if (clienteTelefonoCache.has(pedido.clienteId)) {
+      return clienteTelefonoCache.get(pedido.clienteId);
+    }
     try {
       const cSnap = await getDoc(doc(db, "clientes", pedido.clienteId));
       if (cSnap.exists()) {
         const cData = cSnap.data();
         if (cData.telefono && String(cData.telefono).trim()) {
-          return String(cData.telefono).trim();
+          const tel = String(cData.telefono).trim();
+          clienteTelefonoCache.set(pedido.clienteId, tel);
+          return tel;
         }
       }
     } catch {
       // Ignorar fallback si falla
     }
+    clienteTelefonoCache.set(pedido.clienteId, "Sin teléfono");
   }
   return "Sin teléfono";
 }
@@ -194,13 +202,14 @@ export async function getCarteraPorCobrar({ alcance = "vigente", limite } = {}) 
     if (saldo <= 0.05) continue;
 
     const fecha = resolveFechaPedido(p);
-    const telefono = await resolverTelefonoCliente(p);
+    const rawTel = (p.clienteTelefono && String(p.clienteTelefono).trim()) ? String(p.clienteTelefono).trim() : null;
 
     const pedidoItem = {
       pedidoId: p.displayId || p.id.slice(-6),
       id: p.id,
       cliente: p.clienteNombre || "Cliente",
-      telefono,
+      telefono: rawTel,
+      clienteId: p.clienteId || null,
       fechaEntrega: fecha || "Sin fecha",
       estado: p.estado || "Aprobada",
       total: Number(total.toFixed(2)),
