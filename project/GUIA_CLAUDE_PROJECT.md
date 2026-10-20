@@ -1,53 +1,65 @@
-# 🚀 GUÍA DE CONFIGURACIÓN DEL PROYECTO CHARBELA EN CLAUDE & GITHUB
+# 🚀 GUÍA OFICIAL: CÓMO INSTALAR EL ASISTENTE DE CHARBELA EN CLAUDE
 
-Esta guía detalla paso a paso cómo crear el **Proyecto de Claude** (en Claude Web, Claude Desktop o Claude Cowork) conectando:
-1. **Conector MCP en Tiempo Real:** Servidor Cloud Run (`https://charbela-mcp-775456671841.us-central1.run.app/mcp`)
-2. **Repositorio Unificado de Conocimiento:** `nandodv8/charbela-brand` (contiene todo el sistema de marca Polen Estudio y el catálogo completo de las 13 habilidades operativas).
-
-> 💡 **Cero conflictos de repositorio:** En Claude Projects solo se vincula **un único repositorio de GitHub** (`charbela-brand`), ya que las herramientas del CRM se ejecutan directamente desde el Servidor MCP en Cloud Run.
+Esta guía contiene los pasos puntuales y el **detalle exacto de qué llenar en cada casilla** para activar tu Asistente en Claude.
 
 ---
 
-## 📋 1. ¿Cómo crear el Proyecto en Claude?
+## ⚡ PASO 1: Cómo Agregar el Servidor MCP a Claude
 
-1. Entra a tu cuenta en [Claude.ai](https://claude.ai) o abre Claude Desktop.
-2. En la barra lateral izquierda, haz clic en **Projects** (Proyectos) y selecciona **+ Create Project** (Crear Proyecto).
-3. Configura los datos básicos:
-   - **Nombre del Proyecto:** `Charbela Pastelería - Agente Ejecutivo CRM`
-   - **Descripción:** `Asistente ejecutivo y operativo 360° para Charbela Pastelería con acceso a ventas, taller, nómina, finanzas, recetas, marca y feedback.`
-4. En la sección **Project Instructions** (Instrucciones del Proyecto), haz clic en **Edit** y pega el contenido completo de:
-   👉 [`CLAUDE_PROJECT_INSTRUCTIONS.md`](file:///C:/Users/fca/Documents/charbela-mcp/project/CLAUDE_PROJECT_INSTRUCTIONS.md)
+1. En Claude (versión web o aplicación de escritorio), haz clic en tu perfil o en **Ajustes (Settings)**.
+2. Entra a la pestaña **Integrations** (o **Servidores MCP** / **Add MCP Server**).
+3. Haz clic en **Add Server (Agregar Servidor)** y completa cada espacio del formulario:
 
----
+| Casilla en Claude | Qué llenar (Valor exacto a copiar y pegar) |
+| :--- | :--- |
+| **Server Name (Nombre del Servidor):** | `Charbela CRM` |
+| **Server URL (URL del Servidor):** | `https://charbela-mcp-775456671841.us-central1.run.app/mcp` |
+| **Authentication (Tipo de Autenticación):** | Seleccionar `OAuth 2.0` |
+| **Client ID (ID de Cliente):** | `charbela_oauth_client_prod_2026` |
+| **Client Secret (Secreto de Cliente):** | *(Dejar completamente en blanco / vacío)* |
 
-## 🐙 2. Conectar el Proyecto con GitHub (Project Knowledge)
-
-Para que Claude conozca la base de datos, las reglas operativas y la nueva identidad de marca de Polen Estudio:
-
-### Repositorio Único: `https://github.com/nandodv8/charbela-brand`
-1. En **Project Knowledge**, haz clic en **Add Content** ➔ **GitHub**.
-2. Selecciona el repositorio `nandodv8/charbela-brand` (rama `main`).
-3. **Regla de Carga Ligera (Cargar todo menos Marca y Referencia):**
-   - ✅ **Cargar:** `01_DOCS/` (BRAND.md, MICROCOPY.md)
-   - ✅ **Cargar:** `02_PARA_EL_EQUIPO/` (guías operativas y checklists)
-   - ✅ **Cargar:** `03_SKILLS/` (las 13 habilidades completas: 5 de marca y 8 operativas de taller, ventas, finanzas, etc.)
-   - ✅ **Cargar:** `04_TOKENS/` (tokens CSS y JSON, colores y tipografías)
-   - ❌ **Excluir:** `05_MARCA/` y `06_REFERENCIA/` *(se omiten para no sobrecargar el proyecto con PDFs de 40MB e imágenes pesadas)*.
+4. Haz clic en **Connect (Conectar)** o Guardar.
+5. Se abrirá una ventana emergente con el logo de Charbela:
+   * Pulsa en el botón **"Continuar con Google"**.
+   * Elige tu correo habitual de Gmail (`gladysaltospizarro@gmail.com`, `charbelita314@gmail.com`, `fcolombo87@gmail.com`, etc.).
+   * Verás una marca verde que confirma la conexión activa.
 
 ---
 
-## ⚡ 3. Conexión del Conector MCP (Cloud Run)
+## 📋 PASO 2: Cómo Crear y Configurar el Proyecto en Claude
 
-En la configuración de Claude (Ajustes ➔ Conectar Servidor MCP):
+1. En el menú de la izquierda en Claude, entra a la sección **Projects (Proyectos)**.
+2. Haz clic en **+ Create Project (+ Crear Proyecto)** y llena cada casilla:
 
-- **Nombre del Servidor:** `Charbela CRM`
-- **URL Oficial:** `https://charbela-mcp-775456671841.us-central1.run.app/mcp`
-- **ID de Cliente (Client ID):** `charbela_oauth_client_prod_2026`
-- **Secreto de Cliente:** *(Dejar completamente en blanco / vacío)*
-- **Usuarios Autorizados:**
-  - `gladysaltospizarro@gmail.com`
-  - `fcolombo87@gmail.com`
-  - `charbelita314@gmail.com`
-  - `gracesantoszamora@hotmail.com`
-  - `july.villafuerte.p@gmail.com`
-  - `zambucha.ec@gmail.com`
+| Casilla en Claude | Qué llenar (Valor exacto) |
+| :--- | :--- |
+| **Project Name (Nombre del Proyecto):** | `Charbela Pastelería - Agente Ejecutivo CRM` |
+| **Project Description (Descripción):** | `Asistente inteligente 360° para Charbela Pastelería con acceso a ventas, taller, nómina, finanzas, recetas y marca.` |
+| **Project Instructions (Instrucciones):** | Haz clic en **Edit (Editar)** y pega el texto maestro oficial que se encuentra en [`CLAUDE_PROJECT_INSTRUCTIONS.md`](file:///C:/Users/fca/Documents/charbela-mcp/project/CLAUDE_PROJECT_INSTRUCTIONS.md). Pulsa **Save**. |
+
+---
+
+## 🐙 PASO 3: Cómo Agregar los Dos Repositorios en Project Knowledge
+
+Dentro de tu Proyecto en Claude, entra a la pestaña **Project Knowledge (Conocimiento del Proyecto)** y sigue estos dos pasos:
+
+### 1. Agregar el Repositorio de Operaciones & CRM:
+1. Pulsa en **Add Content** ➔ selecciona **GitHub**.
+2. Conecta el repositorio: `https://github.com/nandodv8/charbela-mcp` (rama `main`).
+3. **Carpetas a marcar:**
+   * ☑️ `skills/` (Contiene las habilidades de obrador, ventas, finanzas, nómina y recetas).
+   * ☑️ `project/` (Contiene las guías e instrucciones).
+   * ⬜ *(Desmarcar cualquier otra carpeta)*.
+4. Pulsa en **Import / Add**.
+
+### 2. Agregar el Repositorio de Marca Charbela & Polen:
+1. Vuelve a pulsar en **Add Content** ➔ selecciona **GitHub**.
+2. Conecta el repositorio: `https://github.com/nandodv8/charbela-brand` (rama `main`).
+3. **Carpetas a marcar (Regla: Cargar todo menos marca y referencia):**
+   * ☑️ `01_DOCS/` (Manual de marca, BRAND.md, MICROCOPY.md).
+   * ☑️ `02_PARA_EL_EQUIPO/` (Checklists de empaque, horneo y despacho).
+   * ☑️ `03_SKILLS/` (Voz de marca, WhatsApp y productos).
+   * ☑️ `04_TOKENS/` (Paleta de colores HEX/Pantone y tipografías).
+   * ⬜ `05_MARCA/` ➔ **DEJAR DESMARCADO** *(evita PDFs pesados de 40MB)*.
+   * ⬜ `06_REFERENCIA/` ➔ **DEJAR DESMARCADO** *(evita fotos pesadas)*.
+4. Pulsa en **Import / Add**.
