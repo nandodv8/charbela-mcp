@@ -174,11 +174,7 @@ const serverInstance = http.createServer(async (req, res) => {
     const resource = reqUrl.searchParams.get("resource") || RESOURCE_URL;
 
     const configuredClientId = getOAuthClientId();
-    if (clientId && configuredClientId && clientId !== configuredClientId) {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "unauthorized_client", error_description: "client_id no autorizado" }));
-      return;
-    }
+    const effectiveClientId = clientId || configuredClientId;
 
     const allowedRedirects = getAllowedRedirectUris();
     if (!redirectUri || !allowedRedirects.includes(redirectUri)) {
@@ -450,12 +446,7 @@ const serverInstance = http.createServer(async (req, res) => {
       const grantType = params.grant_type;
       const clientId = params.client_id;
       const configuredClientId = getOAuthClientId();
-
-      if (configuredClientId && clientId && clientId !== configuredClientId) {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "unauthorized_client", error_description: "client_id no válido" }));
-        return;
-      }
+      const effectiveClientId = clientId || configuredClientId;
 
       if (grantType === "authorization_code") {
         const code = params.code;
