@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Generador del PDF Ejecutivo Completo para Charbela Pastelería
-Guía de Configuración, Parámetros Exactos, Client ID, Enlaces e Instrucciones
-Incluye Repositorio Oficial Charbela Brand y Carga Ligera
+Generador del PDF Ejecutivo para Charbela Pastelería
+Guía Ejecutiva y Práctica: Visión General de Repositorios y Pasos de Instalación
+Diseñado sin tecnicismos para Charbela y Gladys
 """
 
 import os
@@ -25,7 +25,6 @@ CARD_BG = colors.HexColor("#FAF7F2")       # Crema suave pastelería
 CARD_BORDER = colors.HexColor("#E2D6CA")   # Borde tarjeta
 SUCCESS_BG = colors.HexColor("#F0F7F2")    # Verde menta suave
 SUCCESS_BORDER = colors.HexColor("#C2DEC9")
-SUCCESS_TEXT = colors.HexColor("#1B6334")
 LINE_COLOR = colors.HexColor("#D8C9BB")
 
 class NumberedCanvas(canvas.Canvas):
@@ -48,29 +47,25 @@ class NumberedCanvas(canvas.Canvas):
 
     def draw_decorations(self, total_pages):
         self.saveState()
-        
-        # Encabezado superior en páginas posteriores a la portada
         if self._pageNumber > 1:
             self.setFont("Helvetica-Bold", 8)
             self.setFillColor(PRIMARY)
             self.drawString(40, 755, "CHARBELA PASTELERÍA ARTESANAL")
             self.setFont("Helvetica", 8)
             self.setFillColor(MUTED_TEXT)
-            self.drawString(205, 755, "|   Guía y Ficha de Configuración del Asistente")
+            self.drawString(205, 755, "|   Guía de Configuración e Instalación del Asistente")
             
-            # Línea decorativa superior
             self.setStrokeColor(LINE_COLOR)
             self.setLineWidth(0.7)
             self.line(40, 747, 572, 747)
             
-        # Pie de página en todas las páginas
         self.setStrokeColor(LINE_COLOR)
         self.setLineWidth(0.7)
         self.line(40, 42, 572, 42)
         
         self.setFont("Helvetica", 8)
         self.setFillColor(MUTED_TEXT)
-        self.drawString(40, 30, "Documento de Uso Interno  -  Charbela CRM & Conector Inteligente Cloud Run")
+        self.drawString(40, 30, "Documento de Uso Interno  -  Charbela CRM & Asistente Inteligente")
         
         page_str = f"Página {self._pageNumber} de {total_pages}"
         self.drawRightString(572, 30, page_str)
@@ -93,8 +88,8 @@ def create_pdf(filename):
         'DocTitle',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=19,
-        leading=23,
+        fontSize=18,
+        leading=22,
         textColor=PRIMARY,
         spaceAfter=3
     )
@@ -103,8 +98,8 @@ def create_pdf(filename):
         'DocSubtitle',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=10.5,
-        leading=14.5,
+        fontSize=10,
+        leading=14,
         textColor=ACCENT_GOLD,
         spaceAfter=8
     )
@@ -113,7 +108,7 @@ def create_pdf(filename):
         'Heading1_Custom',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=12,
+        fontSize=11.5,
         leading=15,
         textColor=PRIMARY,
         spaceBefore=7,
@@ -124,10 +119,10 @@ def create_pdf(filename):
         'Body_Custom',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=9,
-        leading=13,
+        fontSize=8.8,
+        leading=12.5,
         textColor=DARK_TEXT,
-        spaceAfter=4
+        spaceAfter=3
     )
 
     body_bold = ParagraphStyle(
@@ -140,8 +135,8 @@ def create_pdf(filename):
         'CardTitle',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=10,
-        leading=13.5,
+        fontSize=9.8,
+        leading=13,
         textColor=PRIMARY,
         spaceAfter=2
     )
@@ -150,8 +145,8 @@ def create_pdf(filename):
         'CardText',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=8.8,
-        leading=12.5,
+        fontSize=8.6,
+        leading=12.2,
         textColor=DARK_TEXT
     )
 
@@ -162,15 +157,6 @@ def create_pdf(filename):
         fontSize=8.3,
         leading=11.8,
         textColor=DARK_TEXT
-    )
-
-    quote_box_text = ParagraphStyle(
-        'QuoteText',
-        parent=styles['Normal'],
-        fontName='Helvetica-Oblique',
-        fontSize=8.5,
-        leading=12,
-        textColor=MUTED_TEXT
     )
 
     badge_top_left = ParagraphStyle(
@@ -195,12 +181,12 @@ def create_pdf(filename):
     story = []
 
     # =========================================================================
-    # PÁGINA 1: PORTADA Y FICHA DE CONEXIÓN RÁPIDA (DATOS EXACTOS)
+    # PÁGINA 1: PORTADA, QUÉ HACE EL ASISTENTE Y VISIÓN GENERAL DE REPOSITORIOS
     # =========================================================================
     header_data = [
         [
             Paragraph("CHARBELA PASTELERÍA ARTESANAL", badge_top_left),
-            Paragraph("MANUAL DE OPERACIÓN Y ASISTENTE 2026", badge_top_right)
+            Paragraph("GUÍA DE ACTIVACIÓN DEL ASISTENTE", badge_top_right)
         ]
     ]
     header_table = Table(header_data, colWidths=[266, 266])
@@ -211,18 +197,19 @@ def create_pdf(filename):
     story.append(header_table)
     story.append(Spacer(1, 6))
 
-    story.append(Paragraph("Tu Asistente Ejecutivo Inteligente en Claude", title_style))
-    story.append(Paragraph("Ficha de conexión rápida, enlaces directos y datos para copiar y pegar", subtitle_style))
+    story.append(Paragraph("Tu Asistente de Gestión en Claude", title_style))
+    story.append(Paragraph("Visión general del sistema, qué contiene cada repositorio y cómo conectarlo", subtitle_style))
     story.append(HRFlowable(width="100%", thickness=1.5, color=ACCENT_GOLD, spaceBefore=0, spaceAfter=8))
 
-    # Tarjeta de Bienvenida
-    intro_p1 = Paragraph(
-        "<b>¡Bienvenidas a la nueva forma de gestionar Charbela!</b><br/>"
-        "Esta guía contiene <b>todos los enlaces, títulos y códigos exactos</b> necesarios para activar tu "
-        "Asistente Ejecutivo en Claude. Sin comandos complejos: solo copia cada valor en la casilla correspondiente.",
+    # Bienvenida sin tecnicismos
+    intro_p = Paragraph(
+        "<b>¡Bienvenidas!</b><br/>"
+        "Este documento explica de forma clara y directa cómo funciona el Asistente Inteligente de Charbela en Claude. "
+        "El asistente se alimenta de <b>dos repositorios en GitHub</b> que contienen todo el conocimiento de la pastelería, "
+        "y se conecta al CRM para que puedas consultar ventas, producción, recetas y finanzas en segundos.",
         card_text
     )
-    intro_table = Table([[intro_p1]], colWidths=[532])
+    intro_table = Table([[intro_p]], colWidths=[532])
     intro_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), CARD_BG),
         ('BOX', (0, 0), (-1, -1), 1, CARD_BORDER),
@@ -231,196 +218,184 @@ def create_pdf(filename):
     story.append(intro_table)
     story.append(Spacer(1, 8))
 
-    # FICHA 1: DATOS PARA CONECTAR EL SERVIDOR MCP EN CLAUDE
-    story.append(Paragraph("1. Datos para Conectar el Servidor MCP en Claude", h1_style))
+    # VISIÓN GENERAL DE LOS DOS REPOSITORIOS
+    story.append(Paragraph("1. Visión General: ¿Qué contiene cada Repositorio en GitHub?", h1_style))
     
-    mcp_data = [
-        [Paragraph("<b>Nombre del Servidor (Server Name):</b>", body_style), Paragraph("<b>Charbela CRM</b>", body_style)],
-        [Paragraph("<b>URL del Servidor (Server URL):</b>", body_style), Paragraph("<b>https://charbela-mcp-775456671841.us-central1.run.app/mcp</b>", body_style)],
-        [Paragraph("<b>Tipo de Autenticación:</b>", body_style), Paragraph("<b>OAuth 2.0</b>", body_style)],
+    repo_data = [
+        [
+            Paragraph("<b>Repositorio 1: Operaciones y CRM</b>", card_title),
+            Paragraph("<b>Repositorio 2: Marca y Estilo (Polen)</b>", card_title)
+        ],
+        [
+            Paragraph("<b>Enlace:</b> https://github.com/nandodv8/charbela-mcp", body_bold),
+            Paragraph("<b>Enlace:</b> https://github.com/nandodv8/charbela-brand", body_bold)
+        ],
+        [
+            Paragraph(
+                "<b>¿Qué contiene?</b><br/>"
+                "&bull; <b>Habilidades operativas de la pastelería:</b> órdenes de producción para el taller, plan semanal de horneado en 4 familias, control de saldos y cobranza.<br/>"
+                "&bull; <b>Herramientas financieras:</b> catálogo de recetas con costo de insumos, nómina del personal y control de gastos con comprobantes SRI.",
+                card_text
+            ),
+            Paragraph(
+                "<b>¿Qué contiene?</b><br/>"
+                "&bull; <b>Identidad oficial de marca (Polen Estudio):</b> tono de voz y personalidad de Charbela.<br/>"
+                "&bull; <b>Dos vías de comunicación:</b> tono cómplice para antojos (Vía BAKES) y tono cálido para tortas de eventos (Vía CELEBRACIÓN).<br/>"
+                "&bull; <b>Checklists para el equipo:</b> estándares de empaque, despacho y plantillas de atención por WhatsApp.",
+                card_text
+            )
+        ],
+        [
+            Paragraph("<b>¿Qué carpetas cargar?</b><br/>Cargar: <b>skills/</b> y <b>project/</b>", body_style),
+            Paragraph("<b>¿Qué carpetas cargar?</b><br/><b>Cargar todo menos marca y referencia:</b><br/>(Sí cargar: 01_DOCS, 02_PARA_EL_EQUIPO, 03_SKILLS, 04_TOKENS. Omitir 05_MARCA y 06_REFERENCIA para evitar sobrepeso).", body_style)
+        ]
+    ]
+    repo_table = Table(repo_data, colWidths=[266, 266])
+    repo_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), SUCCESS_BG),
+        ('BACKGROUND', (1, 0), (1, -1), colors.HexColor("#F9F0F3")),
+        ('BOX', (0, 0), (-1, -1), 1, CARD_BORDER),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, CARD_BORDER),
+        ('PADDING', (0, 0), (-1, -1), 6),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+    ]))
+    story.append(repo_table)
+    story.append(Spacer(1, 8))
+
+    # FICHA RÁPIDA DE CONEXIÓN
+    story.append(Paragraph("2. Datos Rápidos de Conexión del Asistente", h1_style))
+    mcp_quick = [
+        [Paragraph("<b>Nombre del Servidor:</b>", body_style), Paragraph("<b>Charbela CRM</b>", body_style)],
+        [Paragraph("<b>URL del Servidor:</b>", body_style), Paragraph("<b>https://charbela-mcp-775456671841.us-central1.run.app/mcp</b>", body_style)],
+        [Paragraph("<b>Tipo de Conexión:</b>", body_style), Paragraph("OAuth 2.0  (Inicio de sesión seguro con Google)", body_style)],
         [Paragraph("<b>ID de Cliente (Client ID):</b>", body_style), Paragraph("<font color='#721C34'><b>charbela_oauth_client_prod_2026</b></font>", body_style)],
-        [Paragraph("<b>Secreto de Cliente (Client Secret):</b>", body_style), Paragraph("<i>(Dejar completamente en blanco / vacío)</i>", body_style)],
-        [Paragraph("<b>URL de Autorización (si lo pide):</b>", body_style), Paragraph("https://charbela-mcp-775456671841.us-central1.run.app/authorize", body_style)],
-        [Paragraph("<b>URL de Token (si lo pide):</b>", body_style), Paragraph("https://charbela-mcp-775456671841.us-central1.run.app/token", body_style)],
-        [Paragraph("<b>Método de Inicio de Sesión:</b>", body_style), Paragraph("Ventana emergente <b>'Continuar con Google'</b> (tu cuenta habitual)", body_style)]
+        [Paragraph("<b>Secreto de Cliente:</b>", body_style), Paragraph("<i>(Dejar completamente en blanco / vacío)</i>", body_style)]
     ]
-    mcp_table = Table(mcp_data, colWidths=[195, 337])
-    mcp_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#F2EAE1")),
-        ('BACKGROUND', (0, 1), (-1, 1), colors.white),
-        ('BACKGROUND', (0, 2), (-1, 2), colors.HexColor("#FAF7F2")),
-        ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor("#FFF0F4")),
-        ('BACKGROUND', (0, 4), (-1, 4), colors.white),
-        ('BACKGROUND', (0, 5), (-1, 5), colors.HexColor("#FAF7F2")),
-        ('BACKGROUND', (0, 6), (-1, 6), colors.white),
-        ('BACKGROUND', (0, 7), (-1, 7), colors.HexColor("#FAF7F2")),
+    mcp_quick_table = Table(mcp_quick, colWidths=[180, 352])
+    mcp_quick_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), CARD_BG),
         ('BOX', (0, 0), (-1, -1), 1, CARD_BORDER),
         ('INNERGRID', (0, 0), (-1, -1), 0.5, CARD_BORDER),
-        ('PADDING', (0, 0), (-1, -1), 4.5),
+        ('PADDING', (0, 0), (-1, -1), 4),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
     ]))
-    story.append(mcp_table)
+    story.append(mcp_quick_table)
+
+    story.append(PageBreak())
+
+    # =========================================================================
+    # PÁGINA 2: GUÍA DE INSTALACIÓN PASO A PASO (SIN CÓDIGO)
+    # =========================================================================
+    story.append(Paragraph("Cómo Instalar tu Asistente en Claude", title_style))
+    story.append(Paragraph("Instalación sencilla en 3 pasos: Conectar servidor, crear proyecto y agregar repositorios", subtitle_style))
+    story.append(HRFlowable(width="100%", thickness=1.5, color=ACCENT_GOLD, spaceBefore=0, spaceAfter=10))
+
+    # PASO 1
+    paso1 = [
+        Paragraph("<b>PASO 1: Conectar el Servidor de Charbela</b>", card_title),
+        Spacer(1, 2),
+        Paragraph(
+            "1. Abre Claude (en la web o en tu aplicación de escritorio).<br/>"
+            "2. Ve a <b>Ajustes (Settings)</b> ➔ <b>Integraciones / Servidores MCP</b>.<br/>"
+            "3. Pulsa en <b>Agregar Servidor</b> y copia los datos:<br/>"
+            "   &bull; <b>Nombre:</b> Charbela CRM<br/>"
+            "   &bull; <b>URL:</b> https://charbela-mcp-775456671841.us-central1.run.app/mcp<br/>"
+            "   &bull; <b>ID de Cliente:</b> charbela_oauth_client_prod_2026<br/>"
+            "   &bull; <b>Secreto de Cliente:</b> Déjalo vacío.<br/>"
+            "4. Haz clic en <b>Conectar</b>. Se abrirá una ventana con el logo de Charbela.<br/>"
+            "5. Pulsa en <b>'Continuar con Google'</b>, elige tu correo habitual ¡y listo!",
+            card_text
+        )
+    ]
+    paso1_table = Table([[Paragraph("<font size=15 color='#721C34'><b>1</b></font>", ParagraphStyle('P1', alignment=1)), paso1]], colWidths=[36, 496])
+    paso1_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), SUCCESS_BG),
+        ('BOX', (0, 0), (-1, -1), 1, SUCCESS_BORDER),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('PADDING', (0, 0), (-1, -1), 6),
+    ]))
+    story.append(paso1_table)
     story.append(Spacer(1, 8))
 
-    # FICHA 2: DATOS DEL PROYECTO CLAUDE Y GITHUB (UNIFICADO)
-    story.append(Paragraph("2. Datos del Proyecto Claude & Repositorio en GitHub", h1_style))
-    
-    proj_data = [
-        [Paragraph("<b>Título del Proyecto en Claude:</b>", body_style), Paragraph("<b>Charbela Pastelería - Agente Ejecutivo CRM</b>", body_style)],
-        [Paragraph("<b>Descripción del Proyecto:</b>", body_style), Paragraph("Asistente inteligente 360° para Charbela Pastelería con acceso a ventas, taller, nómina, finanzas, recetas, marca y feedback.", body_style)],
-        [Paragraph("<b>Repositorio Oficial en GitHub:</b>", body_style), Paragraph("<b>https://github.com/nandodv8/charbela-brand</b>", body_style)],
-        [Paragraph("<b>Instrucción de Carga en GitHub:</b>", body_style), Paragraph("<b>Cargar todo menos marca y referencia</b>:<br/>&bull; <b>01_DOCS/</b> (Manuales, BRAND.md, MICROCOPY.md)<br/>&bull; <b>02_PARA_EL_EQUIPO/</b> (Estándares de horneo y despacho)<br/>&bull; <b>03_SKILLS/</b> (Catálogo completo de las 13 habilidades operativas y de marca)<br/>&bull; <b>04_TOKENS/</b> (Colores HEX/Pantone, tipografías y reglas de estilo)<br/><i>(Omitir 05_MARCA/ y 06_REFERENCIA/ para evitar sobrepeso en Claude)</i>", body_style)],
-        [Paragraph("<b>Servidor MCP de Operaciones:</b>", body_style), Paragraph("Se conecta directo por <b>Server URL</b> (Fase A). <b>No requiere vincularse como repo GitHub</b>, eliminando cualquier conflicto de doble repositorio.", body_style)]
+    # PASO 2
+    paso2 = [
+        Paragraph("<b>PASO 2: Crear el Proyecto en Claude</b>", card_title),
+        Spacer(1, 2),
+        Paragraph(
+            "1. En el menú de la izquierda en Claude, entra a <b>Proyectos (Projects)</b>.<br/>"
+            "2. Haz clic en <b>+ Crear Proyecto (+ Create Project)</b>.<br/>"
+            "3. En título escribe: <b>Charbela Pastelería - Agente Ejecutivo CRM</b>.<br/>"
+            "4. En la casilla <b>Project Instructions</b> haz clic en <b>Editar</b> y pega el texto de las instrucciones que se encuentra en la <b>Página 3</b> de esta guía.",
+            card_text
+        )
     ]
-    proj_table = Table(proj_data, colWidths=[195, 337])
-    proj_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#F2EAE1")),
-        ('BACKGROUND', (0, 1), (-1, 1), colors.white),
-        ('BACKGROUND', (0, 2), (-1, 2), SUCCESS_BG),
-        ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor("#F9F0F3")),
-        ('BACKGROUND', (0, 4), (-1, 4), colors.HexColor("#FAF7F2")),
+    paso2_table = Table([[Paragraph("<font size=15 color='#721C34'><b>2</b></font>", ParagraphStyle('P2', alignment=1)), paso2]], colWidths=[36, 496])
+    paso2_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), CARD_BG),
         ('BOX', (0, 0), (-1, -1), 1, CARD_BORDER),
-        ('INNERGRID', (0, 0), (-1, -1), 0.5, CARD_BORDER),
-        ('PADDING', (0, 0), (-1, -1), 4.5),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('PADDING', (0, 0), (-1, -1), 6),
     ]))
-    story.append(proj_table)
+    story.append(paso2_table)
     story.append(Spacer(1, 8))
 
-    # FICHA 3: ENLACES DIRECTOS DEL CRM DE CHARBELA
-    story.append(Paragraph("3. Enlaces Directos del CRM (Accesibles en un Clic)", h1_style))
-    
-    crm_links_data = [
-        [Paragraph("<b>Portal Principal del CRM:</b>", body_style), Paragraph("https://crm.charbelapasteleria.com", body_style)],
-        [Paragraph("<b>Taller de Producción / Obrador:</b>", body_style), Paragraph("https://crm.charbelapasteleria.com/produccion", body_style)],
-        [Paragraph("<b>Ventas, Pedidos y Cartera:</b>", body_style), Paragraph("https://crm.charbelapasteleria.com/ventas", body_style)],
-        [Paragraph("<b>Nómina y Asistencia:</b>", body_style), Paragraph("https://crm.charbelapasteleria.com/nomina", body_style)],
-        [Paragraph("<b>Finanzas y Gastos:</b>", body_style), Paragraph("https://crm.charbelapasteleria.com/finanzas", body_style)],
-        [Paragraph("<b>Recetas, Costos y Calidad:</b>", body_style), Paragraph("https://crm.charbelapasteleria.com/calidad", body_style)]
+    # PASO 3
+    paso3 = [
+        Paragraph("<b>PASO 3: Agregar los Dos Repositorios en el Proyecto</b>", card_title),
+        Spacer(1, 2),
+        Paragraph(
+            "Dentro de tu Proyecto en Claude, entra a la pestaña <b>Project Knowledge (Conocimiento)</b> y pulsa en <b>Add Content ➔ GitHub</b>:<br/><br/>"
+            "&bull; <b>Agregar Repositorio 1 (Operación & CRM):</b><br/>"
+            "   Conecta <b>https://github.com/nandodv8/charbela-mcp</b> y selecciona las carpetas <b>skills/</b> y <b>project/</b>.<br/><br/>"
+            "&bull; <b>Agregar Repositorio 2 (Marca Charbela & Polen):</b><br/>"
+            "   Conecta <b>https://github.com/nandodv8/charbela-brand</b> y aplica la regla de carga ligera:<br/>"
+            "   - <b>Cargar todo menos marca y referencia:</b> selecciona <b>01_DOCS/</b>, <b>02_PARA_EL_EQUIPO/</b>, <b>03_SKILLS/</b> y <b>04_TOKENS/</b>.<br/>"
+            "   - Deja desmarcadas <b>05_MARCA/</b> y <b>06_REFERENCIA/</b> para que el proyecto no se ponga pesado.",
+            card_text
+        )
     ]
-    crm_links_table = Table(crm_links_data, colWidths=[195, 337])
-    crm_links_table.setStyle(TableStyle([
+    paso3_table = Table([[Paragraph("<font size=15 color='#721C34'><b>3</b></font>", ParagraphStyle('P3', alignment=1)), paso3]], colWidths=[36, 496])
+    paso3_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#F9F0F3")),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor("#E2D0D8")),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('PADDING', (0, 0), (-1, -1), 6),
+    ]))
+    story.append(paso3_table)
+    story.append(Spacer(1, 8))
+
+    # ENLACES RÁPIDOS CRM
+    story.append(Paragraph("Enlaces Directos a los Módulos del CRM (Un Clic)", h1_style))
+    crm_data = [
+        [Paragraph("<b>Portal Principal:</b> https://crm.charbelapasteleria.com", body_style), Paragraph("<b>Taller y Obrador:</b> .../produccion", body_style)],
+        [Paragraph("<b>Ventas y Cartera:</b> .../ventas", body_style), Paragraph("<b>Finanzas y Gastos:</b> .../finanzas", body_style)],
+        [Paragraph("<b>Nómina y Asistencia:</b> .../nomina", body_style), Paragraph("<b>Recetas y Costos:</b> .../calidad", body_style)]
+    ]
+    crm_table = Table(crm_data, colWidths=[266, 266])
+    crm_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), CARD_BG),
         ('BOX', (0, 0), (-1, -1), 1, CARD_BORDER),
         ('INNERGRID', (0, 0), (-1, -1), 0.5, CARD_BORDER),
         ('PADDING', (0, 0), (-1, -1), 3.5),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
     ]))
-    story.append(crm_links_table)
+    story.append(crm_table)
 
     story.append(PageBreak())
 
     # =========================================================================
-    # PÁGINA 2: PASO A PASO PARA CONECTAR CLAUDE Y GITHUB
-    # =========================================================================
-    story.append(Paragraph("Paso a Paso de Conexión en Claude", title_style))
-    story.append(Paragraph("Configuración en 3 fases: Conector MCP, Proyecto y Carga Ligera de Repositorios", subtitle_style))
-    story.append(HRFlowable(width="100%", thickness=1.5, color=ACCENT_GOLD, spaceBefore=0, spaceAfter=12))
-
-    # FASE A: AGREGAR EL CONECTOR MCP
-    fase_a = [
-        Paragraph("<b>FASE A: Conectar el Servidor MCP de Charbela</b>", card_title),
-        Spacer(1, 2),
-        Paragraph(
-            "1. En Claude (pantalla de Ajustes / Integraciones o botón de Conectar Servidor MCP):<br/>"
-            "2. En <b>Nombre del Servidor</b> escribe: <b>Charbela CRM</b>.<br/>"
-            "3. En <b>URL</b> pega: <b>https://charbela-mcp-775456671841.us-central1.run.app/mcp</b>.<br/>"
-            "4. En <b>ID de Cliente</b> pega: <b>charbela_oauth_client_prod_2026</b>.<br/>"
-            "5. En <b>Secreto de Cliente</b>: déjalo <b>completamente en blanco / vacío</b>.<br/>"
-            "6. Haz clic en <b>Conectar</b>. Se abrirá una ventana con el logo de Charbela.<br/>"
-            "7. Pulsa <b>'Continuar con Google'</b>, elige tu correo de Gmail y ¡listo!",
-            card_text
-        )
-    ]
-    fase_a_table = Table([[Paragraph("<font size=15 color='#721C34'><b>A</b></font>", ParagraphStyle('NA', alignment=1)), fase_a]], colWidths=[36, 496])
-    fase_a_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), SUCCESS_BG),
-        ('BOX', (0, 0), (-1, -1), 1, SUCCESS_BORDER),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('PADDING', (0, 0), (-1, -1), 7),
-    ]))
-    story.append(fase_a_table)
-    story.append(Spacer(1, 8))
-
-    # FASE B: CREAR EL PROYECTO
-    fase_b = [
-        Paragraph("<b>FASE B: Crear el Proyecto en Claude</b>", card_title),
-        Spacer(1, 2),
-        Paragraph(
-            "1. En el menú izquierdo de Claude, haz clic en <b>Proyectos</b> (Projects).<br/>"
-            "2. Pulsa en <b>+ Crear Proyecto</b>.<br/>"
-            "3. En título pon: <b>Charbela Pastelería - Agente Ejecutivo CRM</b>.<br/>"
-            "4. En la casilla <b>Project Instructions</b> haz clic en <b>Editar</b> y pega el texto de las instrucciones (puedes copiarlo directamente de la <b>Página 3</b> de esta guía).",
-            card_text
-        )
-    ]
-    fase_b_table = Table([[Paragraph("<font size=15 color='#721C34'><b>B</b></font>", ParagraphStyle('NB', alignment=1)), fase_b]], colWidths=[36, 496])
-    fase_b_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), CARD_BG),
-        ('BOX', (0, 0), (-1, -1), 1, CARD_BORDER),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('PADDING', (0, 0), (-1, -1), 7),
-    ]))
-    story.append(fase_b_table)
-    story.append(Spacer(1, 8))
-
-    # FASE C: VINCULAR GITHUB (UN SOLO REPOSITORIO CON TODO)
-    fase_c = [
-        Paragraph("<b>FASE C: Vincular Repositorio de Marca y Habilidades en Project Knowledge</b>", card_title),
-        Spacer(1, 2),
-        Paragraph(
-            "1. Dentro de tu Proyecto en Claude, entra a la pestaña <b>Project Knowledge</b> (Conocimiento).<br/>"
-            "2. Haz clic en <b>Add Content</b> y selecciona <b>Connect to GitHub</b>.<br/>"
-            "3. Conecta el repositorio oficial: <b>https://github.com/nandodv8/charbela-brand</b>.<br/>"
-            "4. <b>Regla de carga ligera (cargar todo menos marca y referencia):</b><br/>"
-            "   &bull; <b>SÍ seleccionar:</b> <b>01_DOCS/</b>, <b>02_PARA_EL_EQUIPO/</b>, <b>03_SKILLS/</b> (contiene las 13 habilidades operativas del negocio) y <b>04_TOKENS/</b>.<br/>"
-            "   &bull; <b>NO seleccionar / desmarcar:</b> <b>05_MARCA/</b> y <b>06_REFERENCIA/</b> (evita subir PDFs pesados de 40MB e imágenes de muestra).<br/>"
-            "<i>(Nota: Las herramientas operativas del CRM se ejecutan desde el Servidor MCP conectado en la Fase A, por lo que NO hay conflicto ni necesidad de conectar un segundo repositorio).</i>",
-            card_text
-        )
-    ]
-    fase_c_table = Table([[Paragraph("<font size=15 color='#721C34'><b>C</b></font>", ParagraphStyle('NC', alignment=1)), fase_c]], colWidths=[36, 496])
-    fase_c_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), CARD_BG),
-        ('BOX', (0, 0), (-1, -1), 1, CARD_BORDER),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('PADDING', (0, 0), (-1, -1), 7),
-    ]))
-    story.append(fase_c_table)
-    story.append(Spacer(1, 10))
-
-    # Nota explicativa
-    sync_note = Paragraph(
-        "<b>¿Cómo se mantiene sincronizado?</b><br/>"
-        "Al estar conectado con GitHub, cada vez que Fernando o el equipo actualicen recetas, combos o "
-        "reglas de marca en GitHub, Claude los incorporará automáticamente en segundos.",
-        card_text
-    )
-    sync_table = Table([[sync_note]], colWidths=[532])
-    sync_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), PRIMARY_LIGHT),
-        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor("#E8D1D9")),
-        ('PADDING', (0, 0), (-1, -1), 8),
-    ]))
-    story.append(sync_table)
-
-    story.append(PageBreak())
-
-    # =========================================================================
-    # PÁGINA 3: TEXTO EXACTO DE INSTRUCCIONES DEL PROYECTO (COPIAR Y PEGAR)
+    # PÁGINA 3: TEXTO DE INSTRUCCIONES DEL PROYECTO (COPIAR Y PEGAR)
     # =========================================================================
     story.append(Paragraph("Instrucciones Oficiales del Proyecto", title_style))
     story.append(Paragraph("Texto maestro para copiar y pegar en la casilla 'Project Instructions' de Claude", subtitle_style))
-    story.append(HRFlowable(width="100%", thickness=1.5, color=ACCENT_GOLD, spaceBefore=0, spaceAfter=10))
+    story.append(HRFlowable(width="100%", thickness=1.5, color=ACCENT_GOLD, spaceBefore=0, spaceAfter=8))
 
-    instr_intro = Paragraph(
-        "<b>Instrucción para Charbela y Gladys:</b><br/>"
-        "Copia el texto del recuadro a continuación y pégalo directamente en las <b>Instrucciones del Proyecto</b> en Claude. "
-        "Este texto le indica a la inteligencia artificial exactamente cómo debe atenderte:",
+    story.append(Paragraph(
+        "<b>Instrucción para Charbela y Gladys:</b> Copia todo el contenido del recuadro a continuación y pégalo "
+        "en las instrucciones de tu proyecto en Claude. Este texto le enseña al asistente cómo debe responderte:",
         card_text
-    )
-    story.append(instr_intro)
-    story.append(Spacer(1, 8))
+    ))
+    story.append(Spacer(1, 6))
 
     instructions_block = Paragraph(
         "Eres el <b>Agente Ejecutivo & Concierge Operativo de Charbela Pastelería Artesanal</b>, conectado en tiempo "
@@ -453,118 +428,79 @@ def create_pdf(filename):
     instructions_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), CARD_BG),
         ('BOX', (0, 0), (-1, -1), 1.2, PRIMARY),
-        ('PADDING', (0, 0), (-1, -1), 10),
+        ('PADDING', (0, 0), (-1, -1), 8),
     ]))
     story.append(instructions_table)
 
     story.append(PageBreak())
 
     # =========================================================================
-    # PÁGINA 4: CATÁLOGO DE HABILIDADES Y CASOS COTIDIANOS
+    # PÁGINA 4: PREGUNTAS HABITUALES DEL DÍA A DÍA (CÓMO USARLO)
     # =========================================================================
-    story.append(Paragraph("Catálogo de Habilidades y Casos de Uso", title_style))
-    story.append(Paragraph("Las habilidades de tu repositorio y cómo aprovecharlas en la pastelería", subtitle_style))
-    story.append(HRFlowable(width="100%", thickness=1.5, color=ACCENT_GOLD, spaceBefore=0, spaceAfter=10))
+    story.append(Paragraph("¿Qué le puedes pedir al Asistente?", title_style))
+    story.append(Paragraph("Ejemplos cotidianos de preguntas que puedes hacerle en lenguaje natural", subtitle_style))
+    story.append(HRFlowable(width="100%", thickness=1.5, color=ACCENT_GOLD, spaceBefore=0, spaceAfter=8))
 
-    skills_data = [
+    examples_data = [
         [
-            Paragraph("<b>Habilidad</b>", card_title),
-            Paragraph("<b>¿Cómo te ayuda en el taller o tienda?</b>", card_title),
+            Paragraph("<b>Área del Negocio</b>", card_title),
+            Paragraph("<b>¿Para qué te sirve?</b>", card_title),
             Paragraph("<b>Pregunta de Ejemplo</b>", card_title)
         ],
         [
-            Paragraph("<b>1. Obrador</b>", body_bold),
-            Paragraph("Organiza los horneados en las 4 familias oficiales para optimizar los hornos.", card_text),
-            Paragraph("<i>'¿Qué tortas debemos hornear para el fin de semana?'</i>", quote_box_text)
+            Paragraph("<b>1. Taller y Obrador</b>", body_bold),
+            Paragraph("Organiza los horneados de la semana en las 4 familias para no dejar tortas fuera.", card_text),
+            Paragraph("<i>'¿Qué tortas y bocaditos debemos hornear para este fin de semana?'</i>", instruction_text)
         ],
         [
-            Paragraph("<b>2. Ventas</b>", body_bold),
-            Paragraph("Revisa compras de la web pendientes de sabor y saldos adeudados por clientes.", card_text),
-            Paragraph("<i>'¿Qué pedidos de la página web requieren confirmación?'</i>", quote_box_text)
+            Paragraph("<b>2. Ventas y Clientes</b>", body_bold),
+            Paragraph("Revisa compras de la web pendientes de verificar y saldos adeudados por cobrar.", card_text),
+            Paragraph("<i>'¿Qué pedidos de la página web tienen pago confirmado pero faltan sabores?'</i>", instruction_text)
         ],
         [
-            Paragraph("<b>3. Finanzas</b>", body_bold),
-            Paragraph("Audita gastos con comprobantes SRI y concilia cuentas bancarias.", card_text),
-            Paragraph("<i>'¿Cuáles fueron los egresos más altos de esta semana?'</i>", quote_box_text)
+            Paragraph("<b>3. Finanzas y Caja</b>", body_bold),
+            Paragraph("Reporte de ingresos, gastos del mes, cuentas por cobrar y facturas del SRI.", card_text),
+            Paragraph("<i>'Muéstrame el resumen financiero de este mes y las cuentas por cobrar.'</i>", instruction_text)
         ],
         [
-            Paragraph("<b>4. Marketing & Polen</b>", body_bold),
-            Paragraph("Redacta respuestas dulces para WhatsApp ofreciendo combos y bocaditos.", card_text),
-            Paragraph("<i>'Escríbeme una propuesta de torta y dulces para una boda.'</i>", quote_box_text)
+            Paragraph("<b>4. Mensajes y WhatsApp</b>", body_bold),
+            Paragraph("Redacta respuestas dulces y sugerencias de combos usando la voz de Charbela.", card_text),
+            Paragraph("<i>'Redáctame un mensaje de WhatsApp ofreciendo una mesa de dulces para 50 personas.'</i>", instruction_text)
         ],
         [
-            Paragraph("<b>5. Nómina</b>", body_bold),
-            Paragraph("Controla horas extras, marcaciones de reloj y liquidaciones de quincena.", card_text),
-            Paragraph("<i>'Revisa los fichajes del personal de pastelería de esta quincena.'</i>", quote_box_text)
+            Paragraph("<b>5. Personal y Horarios</b>", body_bold),
+            Paragraph("Revisa horas extras, atrasos del reloj checador y pago de quincenas.", card_text),
+            Paragraph("<i>'¿Hubo algún atraso o marcación pendiente del equipo esta semana?'</i>", instruction_text)
         ],
         [
-            Paragraph("<b>6. Costos</b>", body_bold),
-            Paragraph("Calcula el costo de ingredientes y alerta si la materia prima supera el 35%.", card_text),
-            Paragraph("<i>'Muéstrame el costo detallado de la Torta de Chocolate 20p.'</i>", quote_box_text)
+            Paragraph("<b>6. Recetas y Costos</b>", body_bold),
+            Paragraph("Calcula el costo exacto de ingredientes y alerta si la materia prima subió.", card_text),
+            Paragraph("<i>'¿Cuánto nos cuesta producir la Torta de Chocolate de 20 porciones?'</i>", instruction_text)
         ],
         [
-            Paragraph("<b>7. Calidad</b>", body_bold),
-            Paragraph("Bitácora de fotos testigo y causa raíz para garantizar cero defectos.", card_text),
-            Paragraph("<i>'¿Hubo algún reporte de entrega o reclamo en la semana?'</i>", quote_box_text)
-        ],
-        [
-            Paragraph("<b>8. Mejoras</b>", body_bold),
-            Paragraph("Registra sugerencias de cambios en la app directamente en el CRM.", card_text),
-            Paragraph("<i>'Reporta que en pedidos queremos filtrar por sector de entrega.'</i>", quote_box_text)
+            Paragraph("<b>7. Calidad Kaizen</b>", body_bold),
+            Paragraph("Bitácora de fotos de entrega y resolución de incidentes para cero errores.", card_text),
+            Paragraph("<i>'Revisa si hubo alguna novedad con las entregas de ayer.'</i>", instruction_text)
         ]
     ]
 
-    skills_table = Table(skills_data, colWidths=[110, 252, 170])
-    skills_table.setStyle(TableStyle([
+    examples_table = Table(examples_data, colWidths=[110, 240, 182])
+    examples_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), PRIMARY_LIGHT),
         ('BOX', (0, 0), (-1, -1), 1, CARD_BORDER),
         ('INNERGRID', (0, 0), (-1, -1), 0.5, CARD_BORDER),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('PADDING', (0, 0), (-1, -1), 4),
+        ('PADDING', (0, 0), (-1, -1), 5),
     ]))
-    story.append(skills_table)
-    story.append(Spacer(1, 8))
-
-    story.append(Paragraph("4 Situaciones Reales de Uso", h1_style))
-
-    case1 = [
-        Paragraph("<b>Lunes: Planificar la Producción</b>", card_title),
-        Paragraph("<i>'Claude, prepárame el resumen de producción de la semana por días.'</i><br/>"
-                  "Te dará los bizcochuelos para el jueves y decorados para el viernes.", card_text)
-    ]
-    case2 = [
-        Paragraph("<b>Miércoles: Cobranzas</b>", card_title),
-        Paragraph("<i>'¿Qué pedidos de este fin de semana tienen saldos por cobrar?'</i><br/>"
-                  "Te listará clientes, montos y enlaces para recordarles con amabilidad.", card_text)
-    ]
-    case3 = [
-        Paragraph("<b>Viernes: Control de Calidad</b>", card_title),
-        Paragraph("<i>'Revisa si el pedido #1042 tiene notas especiales o dedicatoria.'</i><br/>"
-                  "Te dará los detalles exactos antes de salir del taller.", card_text)
-    ]
-    case4 = [
-        Paragraph("<b>Cualquier Momento: Mejoras</b>", card_title),
-        Paragraph("<i>'Anota una mejora: en pedidos quisiéramos alerta roja si faltan 24h.'</i><br/>"
-                  "Se registrará en el sistema y Fernando la verá de inmediato.", card_text)
-    ]
-
-    cases_table = Table([[case1, case2], [case3, case4]], colWidths=[261, 261])
-    cases_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), CARD_BG),
-        ('BOX', (0, 0), (-1, -1), 1, CARD_BORDER),
-        ('INNERGRID', (0, 0), (-1, -1), 0.5, CARD_BORDER),
-        ('PADDING', (0, 0), (-1, -1), 6.5),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-    ]))
-    story.append(cases_table)
+    story.append(examples_table)
     story.append(Spacer(1, 8))
 
     # Tarjeta de Soporte Final
     footer_card = [
-        Paragraph("<b>¡Tu pastelería más ágil, organizada y dulce que nunca!</b>", card_title),
+        Paragraph("<b>¡Tu pastelería más organizada, ágil y dulce que nunca!</b>", card_title),
         Paragraph(
-            "Cualquier duda sobre el uso o si deseas sumar una nueva habilidad para Charbela, "
-            "Fernando está disponible para asistirte. Repositorio en <b>https://github.com/nandodv8/charbela-mcp</b>.",
+            "Cualquier ajuste que desees sumar o duda sobre la conexión, Fernando está disponible para asistirte. "
+            "Repositorios oficiales disponibles en GitHub: <b>charbela-mcp</b> y <b>charbela-brand</b>.",
             card_text
         )
     ]
@@ -572,7 +508,7 @@ def create_pdf(filename):
     footer_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), PRIMARY_LIGHT),
         ('BOX', (0, 0), (-1, -1), 1, colors.HexColor("#E8D1D9")),
-        ('PADDING', (0, 0), (-1, -1), 7),
+        ('PADDING', (0, 0), (-1, -1), 6),
     ]))
     story.append(footer_table)
 
@@ -602,7 +538,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Error copiando a {dst}: {e}")
 
-    # Renderizar páginas a imágenes PNG de alta resolución para visualización inmediata
+    # Renderizar páginas a imágenes PNG de alta resolución
     try:
         import fitz
         doc_fitz = fitz.open(out_pdf)
@@ -614,4 +550,3 @@ if __name__ == "__main__":
             print(f"Página {i+1} renderizada a imagen: {img_path}")
     except Exception as e:
         print(f"Error renderizando imágenes: {e}")
-
