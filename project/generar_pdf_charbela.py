@@ -262,14 +262,15 @@ def create_pdf(filename):
     story.append(mcp_table)
     story.append(Spacer(1, 8))
 
-    # FICHA 2: DATOS DEL PROYECTO CLAUDE Y GITHUB
-    story.append(Paragraph("2. Datos del Proyecto Claude & Repositorios en GitHub", h1_style))
+    # FICHA 2: DATOS DEL PROYECTO CLAUDE Y GITHUB (UNIFICADO)
+    story.append(Paragraph("2. Datos del Proyecto Claude & Repositorio en GitHub", h1_style))
     
     proj_data = [
         [Paragraph("<b>Título del Proyecto en Claude:</b>", body_style), Paragraph("<b>Charbela Pastelería - Agente Ejecutivo CRM</b>", body_style)],
         [Paragraph("<b>Descripción del Proyecto:</b>", body_style), Paragraph("Asistente inteligente 360° para Charbela Pastelería con acceso a ventas, taller, nómina, finanzas, recetas, marca y feedback.", body_style)],
-        [Paragraph("<b>Repo 1 (Operación & MCP):</b>", body_style), Paragraph("<b>https://github.com/nandodv8/charbela-mcp</b>  <i>(Cargar: skills/ y project/)</i>", body_style)],
-        [Paragraph("<b>Repo 2 (Marca Oficial Polen):</b>", body_style), Paragraph("<b>https://github.com/nandodv8/charbela-brand</b>  <i>(Cargar todo menos marca y referencia)</i>", body_style)]
+        [Paragraph("<b>Repositorio Oficial en GitHub:</b>", body_style), Paragraph("<b>https://github.com/nandodv8/charbela-brand</b>", body_style)],
+        [Paragraph("<b>Instrucción de Carga en GitHub:</b>", body_style), Paragraph("<b>Cargar todo menos marca y referencia</b>:<br/>&bull; <b>01_DOCS/</b> (Manuales, BRAND.md, MICROCOPY.md)<br/>&bull; <b>02_PARA_EL_EQUIPO/</b> (Estándares de horneo y despacho)<br/>&bull; <b>03_SKILLS/</b> (Catálogo completo de las 13 habilidades operativas y de marca)<br/>&bull; <b>04_TOKENS/</b> (Colores HEX/Pantone, tipografías y reglas de estilo)<br/><i>(Omitir 05_MARCA/ y 06_REFERENCIA/ para evitar sobrepeso en Claude)</i>", body_style)],
+        [Paragraph("<b>Servidor MCP de Operaciones:</b>", body_style), Paragraph("Se conecta directo por <b>Server URL</b> (Fase A). <b>No requiere vincularse como repo GitHub</b>, eliminando cualquier conflicto de doble repositorio.", body_style)]
     ]
     proj_table = Table(proj_data, colWidths=[195, 337])
     proj_table.setStyle(TableStyle([
@@ -277,6 +278,7 @@ def create_pdf(filename):
         ('BACKGROUND', (0, 1), (-1, 1), colors.white),
         ('BACKGROUND', (0, 2), (-1, 2), SUCCESS_BG),
         ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor("#F9F0F3")),
+        ('BACKGROUND', (0, 4), (-1, 4), colors.HexColor("#FAF7F2")),
         ('BOX', (0, 0), (-1, -1), 1, CARD_BORDER),
         ('INNERGRID', (0, 0), (-1, -1), 0.5, CARD_BORDER),
         ('PADDING', (0, 0), (-1, -1), 4.5),
@@ -362,18 +364,18 @@ def create_pdf(filename):
     story.append(fase_b_table)
     story.append(Spacer(1, 8))
 
-    # FASE C: CONECTAR GITHUB (CARGA LIGERA)
+    # FASE C: VINCULAR GITHUB (UN SOLO REPOSITORIO CON TODO)
     fase_c = [
-        Paragraph("<b>FASE C: Cargar Habilidades y Marca (Carga Ligera sin sobrepeso)</b>", card_title),
+        Paragraph("<b>FASE C: Vincular Repositorio de Marca y Habilidades en Project Knowledge</b>", card_title),
         Spacer(1, 2),
         Paragraph(
-            "Dentro de tu Proyecto en Claude, entra a la pestaña <b>Project Knowledge</b> (Conocimiento):<br/>"
-            "&bull; <b>1. Del repositorio MCP (https://github.com/nandodv8/charbela-mcp):</b><br/>"
-            "   Cargar la carpeta <b>skills/</b> y la carpeta <b>project/</b>.<br/>"
-            "&bull; <b>2. Del repositorio Marca (https://github.com/nandodv8/charbela-brand):</b><br/>"
-            "   <b>Cargar todo menos marca y referencia:</b><br/>"
-            "   - Sí cargar: <b>01_DOCS/</b> (BRAND.md, MICROCOPY.md), <b>02_PARA_EL_EQUIPO/</b>, <b>03_SKILLS/</b> y <b>04_TOKENS/</b>.<br/>"
-            "   - Excluir: <b>05_MARCA/</b> y <b>06_REFERENCIA/</b> (para evitar subir PDFs de 40MB e imágenes de muestra).",
+            "1. Dentro de tu Proyecto en Claude, entra a la pestaña <b>Project Knowledge</b> (Conocimiento).<br/>"
+            "2. Haz clic en <b>Add Content</b> y selecciona <b>Connect to GitHub</b>.<br/>"
+            "3. Conecta el repositorio oficial: <b>https://github.com/nandodv8/charbela-brand</b>.<br/>"
+            "4. <b>Regla de carga ligera (cargar todo menos marca y referencia):</b><br/>"
+            "   &bull; <b>SÍ seleccionar:</b> <b>01_DOCS/</b>, <b>02_PARA_EL_EQUIPO/</b>, <b>03_SKILLS/</b> (contiene las 13 habilidades operativas del negocio) y <b>04_TOKENS/</b>.<br/>"
+            "   &bull; <b>NO seleccionar / desmarcar:</b> <b>05_MARCA/</b> y <b>06_REFERENCIA/</b> (evita subir PDFs pesados de 40MB e imágenes de muestra).<br/>"
+            "<i>(Nota: Las herramientas operativas del CRM se ejecutan desde el Servidor MCP conectado en la Fase A, por lo que NO hay conflicto ni necesidad de conectar un segundo repositorio).</i>",
             card_text
         )
     ]
@@ -583,10 +585,33 @@ if __name__ == "__main__":
     out_pdf = os.path.join(out_dir, "GUIA_CONFIGURACION_CLAUDE_CHARBELA.pdf")
     create_pdf(out_pdf)
     
-    root_pdf = r"C:\Users\fca\Documents\charbela-mcp\GUIA_CONFIGURACION_CLAUDE_CHARBELA.pdf"
-    shutil.copyfile(out_pdf, root_pdf)
+    destinations = [
+        r"C:\Users\fca\Documents\charbela-mcp\GUIA_CONFIGURACION_CLAUDE_CHARBELA.pdf",
+        r"c:\Users\fca\Documents\Charbela CRM\crm-charbela\GUIA_CONFIGURACION_CLAUDE_CHARBELA.pdf",
+        r"c:\Users\fca\Documents\Charbela CRM\crm-charbela\mcp-server\project\GUIA_CONFIGURACION_CLAUDE_CHARBELA.pdf",
+        r"c:\Users\fca\Documents\Charbela CRM\GUIA_CONFIGURACION_CLAUDE_CHARBELA.pdf",
+        r"c:\Users\fca\Downloads\GUIA_CONFIGURACION_CLAUDE_CHARBELA.pdf",
+        r"C:\Users\fca\.gemini\antigravity\brain\96b2525d-a69d-4a0a-9c48-ecff6d3db77e\GUIA_CONFIGURACION_CLAUDE_CHARBELA.pdf"
+    ]
     
-    crm_pdf = r"c:\Users\fca\Documents\Charbela CRM\crm-charbela\GUIA_CONFIGURACION_CLAUDE_CHARBELA.pdf"
-    shutil.copyfile(out_pdf, crm_pdf)
-    print(f"Copiado a: {root_pdf}")
-    print(f"Copiado a: {crm_pdf}")
+    for dst in destinations:
+        try:
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copyfile(out_pdf, dst)
+            print(f"Copiado a: {dst}")
+        except Exception as e:
+            print(f"Error copiando a {dst}: {e}")
+
+    # Renderizar páginas a imágenes PNG de alta resolución para visualización inmediata
+    try:
+        import fitz
+        doc_fitz = fitz.open(out_pdf)
+        brain_dir = r"C:\Users\fca\.gemini\antigravity\brain\96b2525d-a69d-4a0a-9c48-ecff6d3db77e"
+        for i, page in enumerate(doc_fitz):
+            pix = page.get_pixmap(dpi=150)
+            img_path = os.path.join(brain_dir, f"guia_charbela_pag_{i+1}.png")
+            pix.save(img_path)
+            print(f"Página {i+1} renderizada a imagen: {img_path}")
+    except Exception as e:
+        print(f"Error renderizando imágenes: {e}")
+

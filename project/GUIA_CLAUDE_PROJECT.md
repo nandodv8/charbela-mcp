@@ -1,8 +1,10 @@
 # 🚀 GUÍA DE CONFIGURACIÓN DEL PROYECTO CHARBELA EN CLAUDE & GITHUB
 
-Esta guía detalla paso a paso cómo crear el **Proyecto de Claude** (en Claude Web, Claude Desktop o Claude Cowork) y vincularlo con los repositorios oficiales de GitHub:
-1. **Conector MCP & Operaciones:** `nandodv8/charbela-mcp`
-2. **Sistema de Marca Oficial:** `nandodv8/charbela-brand`
+Esta guía detalla paso a paso cómo crear el **Proyecto de Claude** (en Claude Web, Claude Desktop o Claude Cowork) conectando:
+1. **Conector MCP en Tiempo Real:** Servidor Cloud Run (`https://charbela-mcp-775456671841.us-central1.run.app/mcp`)
+2. **Repositorio Unificado de Conocimiento:** `nandodv8/charbela-brand` (contiene todo el sistema de marca Polen Estudio y el catálogo completo de las 13 habilidades operativas).
+
+> 💡 **Cero conflictos de repositorio:** En Claude Projects solo se vincula **un único repositorio de GitHub** (`charbela-brand`), ya que las herramientas del CRM se ejecutan directamente desde el Servidor MCP en Cloud Run.
 
 ---
 
@@ -18,35 +20,30 @@ Esta guía detalla paso a paso cómo crear el **Proyecto de Claude** (en Claude 
 
 ---
 
-## 🐙 2. Conectar el Proyecto con GitHub (Conocimiento / Knowledge)
+## 🐙 2. Conectar el Proyecto con GitHub (Project Knowledge)
 
 Para que Claude conozca la base de datos, las reglas operativas y la nueva identidad de marca de Polen Estudio:
 
-### A. Repositorio 1: `nandodv8/charbela-mcp` (Operación y Conector)
+### Repositorio Único: `https://github.com/nandodv8/charbela-brand`
 1. En **Project Knowledge**, haz clic en **Add Content** ➔ **GitHub**.
-2. Selecciona `nandodv8/charbela-mcp` (rama `main`).
-3. Marca las carpetas:
-   - `skills/` (todas las directrices de taller, ventas, nómina, finanzas, etc.)
-   - `project/` (instrucciones y guías)
-
-### B. Repositorio 2: `nandodv8/charbela-brand` (Charbela Brand OS v1.0)
-1. En **Project Knowledge**, haz clic de nuevo en **Add Content** ➔ **GitHub**.
-2. Selecciona `nandodv8/charbela-brand` (rama `main`).
+2. Selecciona el repositorio `nandodv8/charbela-brand` (rama `main`).
 3. **Regla de Carga Ligera (Cargar todo menos Marca y Referencia):**
    - ✅ **Cargar:** `01_DOCS/` (BRAND.md, MICROCOPY.md)
-   - ✅ **Cargar:** `02_PARA_EL_EQUIPO/` (guías de Claude y equipo)
-   - ✅ **Cargar:** `03_SKILLS/` (las 5 habilidades: voz, post, whatsapp, producto, revision)
-   - ✅ **Cargar:** `04_TOKENS/` (tokens CSS y JSON)
+   - ✅ **Cargar:** `02_PARA_EL_EQUIPO/` (guías operativas y checklists)
+   - ✅ **Cargar:** `03_SKILLS/` (las 13 habilidades completas: 5 de marca y 8 operativas de taller, ventas, finanzas, etc.)
+   - ✅ **Cargar:** `04_TOKENS/` (tokens CSS y JSON, colores y tipografías)
    - ❌ **Excluir:** `05_MARCA/` y `06_REFERENCIA/` *(se omiten para no sobrecargar el proyecto con PDFs de 40MB e imágenes pesadas)*.
 
 ---
 
 ## ⚡ 3. Conexión del Conector MCP (Cloud Run)
 
+En la configuración de Claude (Ajustes ➔ Conectar Servidor MCP):
+
 - **Nombre del Servidor:** `Charbela CRM`
 - **URL Oficial:** `https://charbela-mcp-775456671841.us-central1.run.app/mcp`
 - **ID de Cliente (Client ID):** `charbela_oauth_client_prod_2026`
-- **Secreto de Cliente:** *(Dejar en blanco / vacío)*
+- **Secreto de Cliente:** *(Dejar completamente en blanco / vacío)*
 - **Usuarios Autorizados:**
   - `gladysaltospizarro@gmail.com`
   - `fcolombo87@gmail.com`
