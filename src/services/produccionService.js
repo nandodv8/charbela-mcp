@@ -4,18 +4,21 @@
 
 import { db } from "../firebase.js";
 import { collection, getDocs, query, where, orderBy, limit as firestoreLimit } from "firebase/firestore";
+import { resolveFechaPedido, esProduccionActiva } from "./estados.js";
+import { normalizeEcuadorDate } from "../utils/ecuadorDateUtils.js";
 
 /**
  * Normaliza y clasifica un ítem de producción en las 4 familias oficiales del Obrador
  */
-function clasificarItemObrador(item, descripcionCompleta = "") {
-  const desc = (descripcionCompleta || item.descripcion || item.nombre || "").toLowerCase();
+export function clasificarItemObrador(item, descripcionCompleta = "") {
+  const desc = (descripcionCompleta || item.descripcion || item.nombre || item.productoNombre || "").toLowerCase();
   const cat = (item.categoria || "").toLowerCase();
+  const subcat = (item.subcategoria || "").toLowerCase();
 
   // 1.2 Bocaditos Decorados (bocaditos con decoración especial o religiosos)
   if (
-    (desc.includes("bocadito") || desc.includes("bocaditos")) &&
-    (desc.includes("decorad") || desc.includes("religios") || desc.includes("cruz") || desc.includes("paloma") || desc.includes("angel"))
+    (desc.includes("bocadito") || desc.includes("bocaditos") || cat.includes("bocadito")) &&
+    (desc.includes("decorad") || desc.includes("religios") || desc.includes("cruz") || desc.includes("paloma") || desc.includes("angel") || subcat.includes("decorad"))
   ) {
     return "1.2_bocaditos_decorados";
   }
@@ -50,7 +53,9 @@ function clasificarItemObrador(item, descripcionCompleta = "") {
     desc.includes("minitorta") ||
     desc.includes("mini torta") ||
     desc.includes("bento") ||
-    desc.includes("macaron")
+    desc.includes("macaron") ||
+    cat.includes("dulces decorados") ||
+    subcat.includes("decorada")
   ) {
     return "1.3_dulces_decorados";
   }
@@ -91,30 +96,51 @@ export async function getProduccionSemanal(args = {}) {
     fechaFin = range.fechaFin;
   }
 
-  // Consultar pedidos con entrega en el rango de fechas
-  const q = query(
-    collection(db, "pedidos"),
-    where("fechaEntrega", ">=", fechaInicio),
-    where("fechaEntrega", "<=", fechaFin)
-  );
+  // Consultar pedidos buscando por fechaEnvio y por fechaEntrega en paralelo para cubrir todas las variantes
+  const [snapEnvio, snapEntrega] = await Promise.all([
+    getDocs(query(
+      collection(db, "pedidos"),
+      where("fechaEnvio", ">=", fechaInicio),
+      where("fechaEnvio", "<=", fechaFin)
+    )),
+    getDocs(query(
+      collection(db, "pedidos"),
+      where("fechaEntrega", ">=", fechaInicio),
+      where("fechaEntrega", "<=", fechaFin)
+    ))
+  ]);
 
-  const snap = await getDocs(q);
+  const docMap = new Map();
+  snapEnvio.forEach((d) => docMap.set(d.id, { id: d.id, ...d.data() }));
+  snapEntrega.forEach((d) => docMap.set(d.id, { id: d.id, ...d.data() }));
+
   const pedidos = [];
 
-  snap.forEach((docSnap) => {
-    const p = { id: docSnap.id, ...docSnap.data() };
+  docMap.forEach((p) => {
+    if (!esProduccionActiva(p)) return;
+
+    const fechaReal = resolveFechaPedido(p);
+    if (!fechaReal || fechaReal < fechaInicio || fechaReal > fechaFin) return;
+
     const est = (p.estado || "").toLowerCase();
-    // Excluir cancelados o borradores no confirmados
-    if (est !== "cancelada" && est !== "cancelado" && est !== "borrador") {
-      pedidos.push(p);
-    }
+    const pagado = Number(p.pagado ?? p.abono ?? 0);
+    const total = Number(p.total ?? p.coste ?? 0);
+    const saldo = p.saldoPendiente !== undefined ? Number(p.saldoPendiente) : Math.max(0, total - pagado);
+
+    pedidos.push({
+      ...p,
+      fechaNormalizada: fechaReal,
+      esBorradorPagado: est === "borrador" && (saldo <= 0.05 || pagado > 0),
+      totalCalculado: total,
+      saldoCalculado: saldo
+    });
   });
 
-  // Ordenar cronológicamente por fechaEntrega y horaEntrega
+  // Ordenar cronológicamente por fecha y hora
   pedidos.sort((a, b) => {
-    const cmp = (a.fechaEntrega || "").localeCompare(b.fechaEntrega || "");
+    const cmp = (a.fechaNormalizada || "").localeCompare(b.fechaNormalizada || "");
     if (cmp !== 0) return cmp;
-    return (a.horaEntrega || "23:59").localeCompare(b.horaEntrega || "23:59");
+    return (a.horaEntrega || a.hora || "23:59").localeCompare(b.horaEntrega || b.hora || "23:59");
   });
 
   // Estructuras de consolidación
@@ -131,18 +157,18 @@ export async function getProduccionSemanal(args = {}) {
   };
 
   pedidos.forEach((p) => {
-    const dia = p.fechaEntrega || "Sin fecha";
+    const dia = p.fechaNormalizada || "Sin fecha";
     if (!resumen.cronogramaPorDia[dia]) {
       resumen.cronogramaPorDia[dia] = [];
     }
 
     const itemsSummary = [];
-    const itemsList = p.items || (p.productos ? p.productos : []);
+    const itemsList = p.items || (p.productos ? p.productos : p.cart || []);
 
     itemsList.forEach((it) => {
       const cantidad = Number(it.cantidad || 1);
-      const nombreItem = it.descripcion || it.nombre || it.productoNombre || "Item sin nombre";
-      const detalles = it.detalles || it.sabores || it.tematica || "";
+      const nombreItem = it.nombre || it.descripcion || it.productoNombre || "Item sin nombre";
+      const detalles = it.detalles ? (typeof it.detalles === "object" ? Object.values(it.detalles).join(", ") : String(it.detalles)) : (it.sabores || it.tematica || "");
       const fullDesc = `${nombreItem} ${detalles}`.trim();
       const familia = clasificarItemObrador(it, fullDesc);
 
@@ -164,15 +190,25 @@ export async function getProduccionSemanal(args = {}) {
       itemsSummary.push(`${cantidad}x ${nombreItem}${detalles ? ` (${detalles})` : ""}`);
     });
 
-    resumen.cronogramaPorDia[dia].push({
+    const entry = {
+      orderId: p.id,
       pedidoId: p.displayId || p.id.slice(-6),
-      cliente: p.clienteNombre || "Cliente",
-      hora: p.horaEntrega || "Por coordinar",
+      cliente: p.clienteNombre || p.cliente || "Cliente",
+      hora: p.horaEntrega || p.hora || "Por coordinar",
       estado: p.estado || "Aprobada",
-      tipoEntrega: p.tipoEntrega || (p.costoDelivery ? "A Domicilio" : "Retiro en Obrador"),
+      total: p.totalCalculado,
+      saldo: p.saldoCalculado,
+      tipoEntrega: p.metodoEntrega || (p.costoDelivery ? "A Domicilio" : "Retiro en Obrador"),
       items: itemsSummary,
-      notasDiseno: p.notas || p.notasDiseno || ""
-    });
+      notasDiseno: p.notas || p.observaciones || "",
+      enlaceCrm: `https://crm.charbelapasteleria.com/produccion?orderId=${p.id}`
+    };
+
+    if (p.esBorradorPagado) {
+      entry.advertencia = "⚠️ Pedido con saldo $0.00 en estado Borrador; requiere confirmación de estado administrativo en CRM.";
+    }
+
+    resumen.cronogramaPorDia[dia].push(entry);
   });
 
   // Limpiar Sets de detalles a Arrays para salida JSON limpia
@@ -220,10 +256,11 @@ export async function getHistoricoProduccion(args = {}) {
     }
 
     resultados.push({
+      orderId: p.id,
       pedidoId: p.displayId || p.id,
-      cliente: p.clienteNombre,
-      fechaEntrega: p.fechaEntrega,
-      horaEntrega: p.horaEntrega,
+      cliente: p.clienteNombre || p.cliente,
+      fechaEntrega: resolveFechaPedido(p),
+      horaEntrega: p.horaEntrega || p.hora,
       estado: p.estado,
       total: p.total || p.coste || 0,
       saldo: p.saldoPendiente || 0,

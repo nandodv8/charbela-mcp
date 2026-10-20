@@ -119,6 +119,12 @@ export async function registerExpenseGasto({
     throw new Error("La descripción del gasto es obligatoria (ej. 'Compra de 5kg de cobertura de chocolate').");
   }
 
+  // Validación de seguridad contable H-01: Bloquear datos de testing en producción
+  const checkTest = `${descripcion} ${proveedor}`.toUpperCase();
+  if (checkTest.includes("TEST-") || checkTest.includes("TEST_") || checkTest.includes("TEST-REF")) {
+    throw new Error("Operación rechazada: No se permite registrar gastos con identificadores o referencias de testing ('TEST-') en el entorno contable de producción.");
+  }
+
   const fechaRef = fecha ? normalizeEcuadorDate(fecha) : getEcuadorToday();
   const cleanCat = categoria ? categoria.trim() : "Materia Prima";
   const catLower = cleanCat.toLowerCase();
@@ -215,7 +221,7 @@ export async function getFinancialSummaryConversational({ fechaInicio, fechaFin,
   // Conjunto COGS (Costo directo de ventas)
   const isCogs = (cat) => {
     const l = normalizarCat(cat).toLowerCase();
-    return l === "materia prima" || l === "mano de obra directa";
+    return l === "materia prima" || l === "mano de obra directa" || l.includes("empaque directo") || l.includes("costo directo");
   };
 
   // 1. Filtrar y procesar gastos
@@ -361,19 +367,19 @@ export async function getFinancialSummaryConversational({ fechaInicio, fechaFin,
     lineasParaCopiar.push(`🏦 *Hipotecario/Préstamo:* Hay $${totalCuotas.toFixed(2)} registrado como gasto completo en OPEX. Conviene separar la cuota en interés (gasto) y amortización de capital en el CRM para no inflar la pérdida de ${targetMes}.`);
   }
 
-  // B. Detección de COGS atípicamente bajo (< 20%)
-  if (totalIngresosDevengado > 500) {
-    const cogsPct = (totalCOGS / totalIngresosDevengado) * 100;
-    if (cogsPct < 20) {
-      hallazgos.push({
-        tipo: "costo_de_ventas",
-        prioridad: "media",
-        titulo: `COGS atípicamente bajo (${cogsPct.toFixed(1)}% vs rango normal 25%-35%)`,
-        detalle: `En pastelería artesanal, el costo directo de materia prima suele oscilar entre 25% y 35%. Un COGS de ${cogsPct.toFixed(1)}% sugiere compras pendientes de registrar o empaques/cajas ingresados como OPEX.`,
-        accionSugerida: "Revisar facturas de insumos pendientes o reclasificar cajas/empaques a Costo Directo."
-      });
-      lineasParaCopiar.push(`🎂 *COGS Bajo (${cogsPct.toFixed(1)}%):* La materia prima está baja frente a lo usual en pastelería (25-35%). Puede que falten facturas por cargar o que las cajas/empaques deban reclasificarse a costo directo.`);
-    }
+  // B. Detección de COGS fuera del rango operativo oficial (25% - 32%) [H-02]
+  const cogsPctCalculado = totalIngresosDevengado > 0 ? (totalCOGS / totalIngresosDevengado) * 100 : 0;
+  const cogsFueraDeRango = totalIngresosDevengado > 500 && (cogsPctCalculado < 25 || cogsPctCalculado > 32);
+
+  if (cogsFueraDeRango) {
+    hallazgos.push({
+      tipo: "costo_de_ventas_fuera_rango",
+      prioridad: "alta",
+      titulo: `⚠️ Alerta H-02: COGS en ${cogsPctCalculado.toFixed(1)}% está fuera del rango objetivo (25% - 32%)`,
+      detalle: `En Charbela, el rango objetivo de COGS está fijado entre 25% y 32%. Un valor de ${cogsPctCalculado.toFixed(1)}% distorsiona el margen reportado (${margenNetoPct}%). Las causas probables son facturas de insumos pendientes de ingresar o empaques y cajas clasificados en OPEX en lugar de costo directo.`,
+      accionSugerida: "Cargar facturas de materias primas faltantes o reclasificar cajas/empaques a Costo Directo."
+    });
+    lineasParaCopiar.push(`🎂 *COGS Fuera de Rango (${cogsPctCalculado.toFixed(1)}% vs meta 25-32%):* El costo directo reportado no refleja la realidad operativa. Se recomienda auditar facturas de insumos pendientes y reclasificar empaques.`);
   }
 
   // C. Detección de empaques/cajas en Gastos de Operación
@@ -485,6 +491,14 @@ export async function getFinancialSummaryConversational({ fechaInicio, fechaFin,
       cuentasPorCobrarClientesCxC: totalCxC.toFixed(2),
       cuentasPorPagarProveedoresCxP: totalCxP.toFixed(2),
       ivaAcreditableSoportado: totalIvaAcreditable.toFixed(2)
+    },
+    alertaCOGS: {
+      fueraDeRango: cogsFueraDeRango,
+      cogsPorcentajeActual: `${cogsPctCalculado.toFixed(1)}%`,
+      rangoObjetivo: "25% - 32%",
+      diagnostico: cogsFueraDeRango
+        ? `⚠️ Alerta H-02: COGS en ${cogsPctCalculado.toFixed(1)}% está fuera del rango operativo de Charbela (25% - 32%). Requiere revisar facturas de insumos pendientes de ingresar o empaques clasificados en OPEX.`
+        : `✅ COGS en ${cogsPctCalculado.toFixed(1)}% se encuentra dentro del rango operativo saludable (25% - 32%).`
     },
     observacionesParaFernando,
     desgloseGastosPorCategoria: Object.entries(gastosPorCategoria).map(([categoria, monto]) => ({

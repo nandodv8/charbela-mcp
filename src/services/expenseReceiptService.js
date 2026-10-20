@@ -209,6 +209,12 @@ export async function registerExpenseWithReceipt({
     throw new Error("Debes indicar una descripción o detalle del gasto.");
   }
 
+  // Validación de seguridad H-01: Bloqueo de registros de prueba en entorno productivo
+  const checkTest = `${descripcion} ${proveedor} ${referenciaBancaria} ${numeroComprobante}`.toUpperCase();
+  if (checkTest.includes("TEST-") || checkTest.includes("TEST_") || checkTest.includes("TEST-REF")) {
+    throw new Error("Operación rechazada: No se permite registrar gastos con identificadores de prueba ('TEST-') en el entorno contable de producción.");
+  }
+
   const targetDate = fecha ? normalizeEcuadorDate(fecha) : getEcuadorToday();
   const targetMes = getEcuadorMesContable(targetDate);
   const rawCat = categoria ? categoria.trim() : inferCategoryFromText(`${descripcion} ${proveedor}`);

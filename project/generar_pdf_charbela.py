@@ -2,7 +2,7 @@
 """
 Generador del PDF Ejecutivo Completo para Charbela Pastelería
 Guía de Configuración, Parámetros Exactos, Client ID, Enlaces e Instrucciones
-Diseño Tipográfico Limpio y Editorial sin glifos incompatibles
+Incluye Repositorio Oficial Charbela Brand y Carga Ligera
 """
 
 import os
@@ -26,7 +26,6 @@ CARD_BORDER = colors.HexColor("#E2D6CA")   # Borde tarjeta
 SUCCESS_BG = colors.HexColor("#F0F7F2")    # Verde menta suave
 SUCCESS_BORDER = colors.HexColor("#C2DEC9")
 SUCCESS_TEXT = colors.HexColor("#1B6334")
-CODE_BG = colors.HexColor("#F4ECE1")       # Resaltado datos exactos
 LINE_COLOR = colors.HexColor("#D8C9BB")
 
 class NumberedCanvas(canvas.Canvas):
@@ -264,20 +263,20 @@ def create_pdf(filename):
     story.append(Spacer(1, 8))
 
     # FICHA 2: DATOS DEL PROYECTO CLAUDE Y GITHUB
-    story.append(Paragraph("2. Datos del Proyecto Claude & Repositorio GitHub", h1_style))
+    story.append(Paragraph("2. Datos del Proyecto Claude & Repositorios en GitHub", h1_style))
     
     proj_data = [
         [Paragraph("<b>Título del Proyecto en Claude:</b>", body_style), Paragraph("<b>Charbela Pastelería - Agente Ejecutivo CRM</b>", body_style)],
-        [Paragraph("<b>Descripción del Proyecto:</b>", body_style), Paragraph("Asistente inteligente 360° para Charbela Pastelería con acceso a ventas, taller, nómina, finanzas, recetas y feedback.", body_style)],
-        [Paragraph("<b>Repositorio Público en GitHub:</b>", body_style), Paragraph("<b>https://github.com/nandodv8/charbela-mcp</b>", body_style)],
-        [Paragraph("<b>Carpetas a Cargar en Knowledge:</b>", body_style), Paragraph("Carpeta <b>skills/</b> (Habilidades de negocio) y carpeta <b>project/</b>", body_style)]
+        [Paragraph("<b>Descripción del Proyecto:</b>", body_style), Paragraph("Asistente inteligente 360° para Charbela Pastelería con acceso a ventas, taller, nómina, finanzas, recetas, marca y feedback.", body_style)],
+        [Paragraph("<b>Repo 1 (Operación & MCP):</b>", body_style), Paragraph("<b>https://github.com/nandodv8/charbela-mcp</b>  <i>(Cargar: skills/ y project/)</i>", body_style)],
+        [Paragraph("<b>Repo 2 (Marca Oficial Polen):</b>", body_style), Paragraph("<b>https://github.com/nandodv8/charbela-brand</b>  <i>(Cargar todo menos marca y referencia)</i>", body_style)]
     ]
     proj_table = Table(proj_data, colWidths=[195, 337])
     proj_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#F2EAE1")),
         ('BACKGROUND', (0, 1), (-1, 1), colors.white),
         ('BACKGROUND', (0, 2), (-1, 2), SUCCESS_BG),
-        ('BACKGROUND', (0, 3), (-1, 3), colors.white),
+        ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor("#F9F0F3")),
         ('BOX', (0, 0), (-1, -1), 1, CARD_BORDER),
         ('INNERGRID', (0, 0), (-1, -1), 0.5, CARD_BORDER),
         ('PADDING', (0, 0), (-1, -1), 4.5),
@@ -313,7 +312,7 @@ def create_pdf(filename):
     # PÁGINA 2: PASO A PASO PARA CONECTAR CLAUDE Y GITHUB
     # =========================================================================
     story.append(Paragraph("Paso a Paso de Conexión en Claude", title_style))
-    story.append(Paragraph("Configuración en 3 fases: Conector MCP, Proyecto y Conocimiento de GitHub", subtitle_style))
+    story.append(Paragraph("Configuración en 3 fases: Conector MCP, Proyecto y Carga Ligera de Repositorios", subtitle_style))
     story.append(HRFlowable(width="100%", thickness=1.5, color=ACCENT_GOLD, spaceBefore=0, spaceAfter=12))
 
     # FASE A: AGREGAR EL CONECTOR MCP
@@ -363,16 +362,18 @@ def create_pdf(filename):
     story.append(fase_b_table)
     story.append(Spacer(1, 8))
 
-    # FASE C: CONECTAR GITHUB PARA LAS HABILIDADES
+    # FASE C: CONECTAR GITHUB (CARGA LIGERA)
     fase_c = [
-        Paragraph("<b>FASE C: Cargar las Habilidades desde GitHub</b>", card_title),
+        Paragraph("<b>FASE C: Cargar Habilidades y Marca (Carga Ligera sin sobrepeso)</b>", card_title),
         Spacer(1, 2),
         Paragraph(
-            "1. Dentro de tu Proyecto en Claude, entra a la pestaña <b>Project Knowledge</b> (Conocimiento).<br/>"
-            "2. Haz clic en <b>Add Content</b> ➔ <b>GitHub</b>.<br/>"
-            "3. Pega el enlace oficial: <b>https://github.com/nandodv8/charbela-mcp</b>.<br/>"
-            "4. Selecciona la carpeta <b>skills/</b> y la carpeta <b>project/</b>.<br/>"
-            "&bull; <i>Alternativa directa:</i> Si no utilizas el botón de GitHub, puedes pulsar <b>Upload files</b> y subir los archivos de la carpeta <i>skills/</i> que Fernando te compartirá.",
+            "Dentro de tu Proyecto en Claude, entra a la pestaña <b>Project Knowledge</b> (Conocimiento):<br/>"
+            "&bull; <b>1. Del repositorio MCP (https://github.com/nandodv8/charbela-mcp):</b><br/>"
+            "   Cargar la carpeta <b>skills/</b> y la carpeta <b>project/</b>.<br/>"
+            "&bull; <b>2. Del repositorio Marca (https://github.com/nandodv8/charbela-brand):</b><br/>"
+            "   <b>Cargar todo menos marca y referencia:</b><br/>"
+            "   - Sí cargar: <b>01_DOCS/</b> (BRAND.md, MICROCOPY.md), <b>02_PARA_EL_EQUIPO/</b>, <b>03_SKILLS/</b> y <b>04_TOKENS/</b>.<br/>"
+            "   - Excluir: <b>05_MARCA/</b> y <b>06_REFERENCIA/</b> (para evitar subir PDFs de 40MB e imágenes de muestra).",
             card_text
         )
     ]
@@ -389,8 +390,8 @@ def create_pdf(filename):
     # Nota explicativa
     sync_note = Paragraph(
         "<b>¿Cómo se mantiene sincronizado?</b><br/>"
-        "Al estar conectado con GitHub, cada vez que Fernando o el equipo agreguen nuevas recetas, combos de ventas o "
-        "reglas contables, Claude los incorporará automáticamente. ¡Nunca tendrás que volver a configurar el asistente!",
+        "Al estar conectado con GitHub, cada vez que Fernando o el equipo actualicen recetas, combos o "
+        "reglas de marca en GitHub, Claude los incorporará automáticamente en segundos.",
         card_text
     )
     sync_table = Table([[sync_note]], colWidths=[532])
@@ -437,12 +438,12 @@ def create_pdf(filename):
         "&bull; Cotización para el Cliente: https://crm.charbelapasteleria.com/c/{id}<br/>"
         "&bull; Plan de Obrador / Taller: https://crm.charbelapasteleria.com/produccion?orderId={id}<br/>"
         "&bull; Módulos Generales: /nomina , /finanzas , /calidad<br/><br/>"
-        "<b>REGLAS FINANCIERAS Y OPERATIVAS:</b><br/>"
-        "&bull; <b>WooCommerce:</b> Revisa pedidos pendientes de validación de sabor y dedicatoria.<br/>"
-        "&bull; <b>Cartera:</b> Todo pedido debe tener saldo $0.00 antes de ser despachado del taller.<br/>"
-        "&bull; <b>COGS:</b> El costo de materia prima debe mantenerse entre el 25% y 32% del precio.<br/>"
+        "<b>REGLAS DE MARCA (CHARBELA BRAND OS - POLEN ESTUDIO):</b><br/>"
+        "&bull; <b>Vía BAKES (Antojo $1-$25):</b> Tono cómplice, tagline '¡¡No fui yo, fue Charbela!!', Rosa + Naranja Metiche.<br/>"
+        "&bull; <b>Vía CELEBRACIÓN (Eventos $200-$500+):</b> Tono cálido, seguro, sin humor de culpa en cotizaciones o reclamos.<br/>"
+        "&bull; <b>Microcopy:</b> 'Saldo pendiente' (nunca 'saldo por cancelar'); 'Reserva tu fecha en nuestra agenda'.<br/>"
         "&bull; <b>Comprobantes SRI:</b> Alerta sobre egresos sin sustento o factura válida.<br/>"
-        "&bull; <b>Tono de Marca:</b> Cálido, dulce, resolutivo, proactivo y profundamente conocedor del arte pastelero.",
+        "&bull; <b>COGS Objetivo:</b> Entre 25% y 32% del precio de venta.",
         instruction_text
     )
 
@@ -460,7 +461,7 @@ def create_pdf(filename):
     # PÁGINA 4: CATÁLOGO DE HABILIDADES Y CASOS COTIDIANOS
     # =========================================================================
     story.append(Paragraph("Catálogo de Habilidades y Casos de Uso", title_style))
-    story.append(Paragraph("Las 8 habilidades de tu repositorio y cómo aprovecharlas en la pastelería", subtitle_style))
+    story.append(Paragraph("Las habilidades de tu repositorio y cómo aprovecharlas en la pastelería", subtitle_style))
     story.append(HRFlowable(width="100%", thickness=1.5, color=ACCENT_GOLD, spaceBefore=0, spaceAfter=10))
 
     skills_data = [
@@ -485,7 +486,7 @@ def create_pdf(filename):
             Paragraph("<i>'¿Cuáles fueron los egresos más altos de esta semana?'</i>", quote_box_text)
         ],
         [
-            Paragraph("<b>4. Marketing</b>", body_bold),
+            Paragraph("<b>4. Marketing & Polen</b>", body_bold),
             Paragraph("Redacta respuestas dulces para WhatsApp ofreciendo combos y bocaditos.", card_text),
             Paragraph("<i>'Escríbeme una propuesta de torta y dulces para una boda.'</i>", quote_box_text)
         ],
@@ -561,7 +562,7 @@ def create_pdf(filename):
         Paragraph("<b>¡Tu pastelería más ágil, organizada y dulce que nunca!</b>", card_title),
         Paragraph(
             "Cualquier duda sobre el uso o si deseas sumar una nueva habilidad para Charbela, "
-            "Fernando está disponible para asistirte. Documentación en <b>https://github.com/nandodv8/charbela-mcp</b>.",
+            "Fernando está disponible para asistirte. Repositorio en <b>https://github.com/nandodv8/charbela-mcp</b>.",
             card_text
         )
     ]
@@ -582,7 +583,6 @@ if __name__ == "__main__":
     out_pdf = os.path.join(out_dir, "GUIA_CONFIGURACION_CLAUDE_CHARBELA.pdf")
     create_pdf(out_pdf)
     
-    # Copiar a la raíz de charbela-mcp y al CRM
     root_pdf = r"C:\Users\fca\Documents\charbela-mcp\GUIA_CONFIGURACION_CLAUDE_CHARBELA.pdf"
     shutil.copyfile(out_pdf, root_pdf)
     

@@ -14,8 +14,7 @@ import {
   orderBy,
   limit,
   where,
-  Timestamp,
-  runTransaction
+  Timestamp
 } from "firebase/firestore";
 
 import {
@@ -23,19 +22,117 @@ import {
   getEcuadorToday
 } from "../utils/ecuadorDateUtils.js";
 
-const CRM_BASE_URL = "https://charbela-crm.firebaseapp.com";
+import {
+  resolveFechaPedido,
+  esProduccionActiva,
+  coincideEstado,
+  normalizeEstado,
+  esCotizacion
+} from "./estados.js";
+
+const CRM_BASE_URL = "https://crm.charbelapasteleria.com";
+
+/**
+ * Extrae y estructura la información de diseño y adjuntos de un pedido
+ */
+export function extraerDiseno(pedido) {
+  if (!pedido) {
+    return {
+      definido: false,
+      tieneAdjunto: false,
+      requiereDiseno: false,
+      urls: [],
+      tematica: null,
+      textoConfirmado: null,
+      notasDiseno: null
+    };
+  }
+
+  const urls = [];
+  if (pedido.fotoDisenoEvento && typeof pedido.fotoDisenoEvento === "string" && pedido.fotoDisenoEvento.trim()) {
+    urls.push(pedido.fotoDisenoEvento.trim());
+  }
+  if (pedido.disenoUrl && typeof pedido.disenoUrl === "string" && pedido.disenoUrl.trim()) {
+    urls.push(pedido.disenoUrl.trim());
+  }
+  if (Array.isArray(pedido.adjuntos)) {
+    pedido.adjuntos.forEach(u => {
+      if (typeof u === "string" && u.trim()) urls.push(u.trim());
+    });
+  }
+
+  const items = pedido.items || pedido.cart || [];
+  let tieneItemDecorado = false;
+  let textoPauta = pedido.pautaDiseno?.textoConfirmado?.fraseExacta || "";
+
+  for (const it of items) {
+    const cat = (it.categoria || "").toLowerCase();
+    const nom = (it.nombre || it.name || "").toLowerCase();
+    if (cat.includes("decorad") || nom.includes("decorad") || nom.includes("fondant") || nom.includes("torta personaliz")) {
+      tieneItemDecorado = true;
+    }
+    if (Array.isArray(it.imagenes)) {
+      it.imagenes.forEach(u => {
+        if (typeof u === "string" && u.trim()) urls.push(u.trim());
+      });
+    }
+    if (it.pautaDiseno?.textoConfirmado?.fraseExacta && !textoPauta) {
+      textoPauta = it.pautaDiseno.textoConfirmado.fraseExacta;
+    }
+  }
+
+  const uniqueUrls = [...new Set(urls.filter(Boolean))];
+  const tieneAdjunto = uniqueUrls.length > 0;
+  const tematica = pedido.tematica && String(pedido.tematica).trim() ? String(pedido.tematica).trim() : null;
+  const notasDiseno = pedido.notas && String(pedido.notas).trim() ? String(pedido.notas).trim() : null;
+  const textoConf = textoPauta && String(textoPauta).trim() ? String(textoPauta).trim() : null;
+
+  const definido = tieneAdjunto || Boolean(tematica) || Boolean(textoConf) || Boolean(notasDiseno);
+
+  return {
+    definido,
+    tieneAdjunto,
+    requiereDiseno: tieneItemDecorado,
+    urls: uniqueUrls,
+    tematica,
+    textoConfirmado: textoConf,
+    notasDiseno
+  };
+}
+
+/**
+ * Resuelve el teléfono del cliente: si falta en el pedido, busca en la colección clientes
+ */
+async function resolverTelefonoCliente(pedido) {
+  if (pedido.clienteTelefono && String(pedido.clienteTelefono).trim() && pedido.clienteTelefono !== "Sin teléfono") {
+    return String(pedido.clienteTelefono).trim();
+  }
+  if (pedido.clienteId) {
+    try {
+      const cSnap = await getDoc(doc(db, "clientes", pedido.clienteId));
+      if (cSnap.exists()) {
+        const cData = cSnap.data();
+        if (cData.telefono && String(cData.telefono).trim()) {
+          return String(cData.telefono).trim();
+        }
+      }
+    } catch {
+      // Ignorar fallback si falla lectura de cliente individual
+    }
+  }
+  return "Sin teléfono";
+}
 
 /**
  * CREAR PEDIDO NUEVO DESDE EL CHAT
- * Registra cliente, pedido e items, y si hay abono inicial lo registra en la misma operación.
  */
 export async function createOrderFromAgent({
   clienteNombre,
   clienteTelefono,
-  productos, // Array de { nombre, cantidad, tamano, sabor, relleno, precio, especificaciones }
+  productos,
   fechaEntrega,
   horaEntrega = "Pendiente",
-  metodoEntrega = "Retiro en Obrador", // 'Retiro en Obrador' o 'Entrega a Domicilio'
+  metodoEntrega = "Retiro en Obrador",
   direccionEntrega = "",
   total,
   abonoInicial = 0,
@@ -61,7 +158,6 @@ export async function createOrderFromAgent({
     }
   ];
 
-  // Calcular total si no fue provisto explícitamente
   let totalCalculado = parseFloat(total || 0);
   if (totalCalculado <= 0) {
     totalCalculado = itemsList.reduce((acc, it) => acc + (parseFloat(it.precio || 0) * (parseInt(it.cantidad || 1, 10))), 0);
@@ -69,14 +165,14 @@ export async function createOrderFromAgent({
 
   const abonoNum = Math.max(0, parseFloat(abonoInicial || 0));
   const saldoPendiente = Math.max(0, totalCalculado - abonoNum);
-  const estadoInicial = abonoNum >= totalCalculado ? "confirmado" : (abonoNum > 0 ? "en_preparacion" : "pendiente");
-
+  const estadoInicial = abonoNum >= totalCalculado ? "Aprobada" : (abonoNum > 0 ? "Aprobada" : "Borrador");
   const fechaNorm = normalizeEcuadorDate(fechaEntrega);
 
   const orderData = {
     clienteNombre: clienteNombre.trim(),
     clienteTelefono: (clienteTelefono || "").trim(),
     fechaEnvio: fechaNorm,
+    fechaEntrega: fechaNorm,
     horaEntrega: horaEntrega.trim(),
     metodoEntrega: metodoEntrega.trim(),
     direccionEntrega: direccionEntrega.trim(),
@@ -97,7 +193,6 @@ export async function createOrderFromAgent({
   const orderRef = await addDoc(collection(db, "pedidos"), orderData);
   const orderId = orderRef.id;
 
-  // Registrar abono inicial si aplica
   let abonoId = null;
   if (abonoNum > 0) {
     const abonoRef = await addDoc(collection(db, "abonos"), {
@@ -128,8 +223,8 @@ export async function createOrderFromAgent({
       items: itemsList,
       abonoId,
       enlaces: {
-        crmVentas: `https://crm.charbelapasteleria.com/ventas?orderId=${orderId}`,
-        portalCliente: `https://crm.charbelapasteleria.com/c/${orderId}`
+        crmVentas: `${CRM_BASE_URL}/ventas?orderId=${orderId}`,
+        portalCliente: `${CRM_BASE_URL}/c/${orderId}`
       }
     }
   };
@@ -137,14 +232,11 @@ export async function createOrderFromAgent({
 
 /**
  * ACTUALIZAR ESTADO DEL PEDIDO DIRECTAMENTE
- * Mueve el pedido en el pipeline operativo sin abrir el navegador.
  */
 export async function updateOrderStatusFromAgent({ orderId, nuevoEstado, motivo = "" }) {
   if (!orderId) throw new Error("Debes indicar el ID del pedido.");
-  if (!nuevoEstado) throw new Error("Debes indicar el nuevo estado (ej. 'confirmado', 'horneando', 'decorando', 'listo', 'entregado', 'cancelado').");
+  if (!nuevoEstado) throw new Error("Debes indicar el nuevo estado (ej. 'Aprobada', 'Entregado', 'Cancelado').");
 
-  // Normalizar estados habituales
-  const estadoNorm = nuevoEstado.toLowerCase().trim().replace(/\s+/g, "_");
   const orderRef = doc(db, "pedidos", orderId);
   const snap = await getDoc(orderRef);
 
@@ -153,10 +245,10 @@ export async function updateOrderStatusFromAgent({ orderId, nuevoEstado, motivo 
   }
 
   const anterior = snap.data();
-  const estadoAnterior = anterior.estado || "pendiente";
+  const estadoAnterior = anterior.estado || "Borrador";
 
   await updateDoc(orderRef, {
-    estado: estadoNorm,
+    estado: nuevoEstado.trim(),
     ultimoCambioEstado: Timestamp.now(),
     motivoCambio: motivo || "Actualizado desde Claude Desktop MCP",
     updatedAt: Timestamp.now()
@@ -167,13 +259,13 @@ export async function updateOrderStatusFromAgent({ orderId, nuevoEstado, motivo 
     orderId,
     cliente: anterior.clienteNombre || "Cliente",
     estadoAnterior,
-    nuevoEstado: estadoNorm,
-    mensaje: `✅ Estado del pedido #${orderId.substring(0, 6)} cambiado de "${estadoAnterior}" a "${estadoNorm}".`
+    nuevoEstado: nuevoEstado.trim(),
+    mensaje: `✅ Estado del pedido #${orderId.substring(0, 6)} cambiado de "${estadoAnterior}" a "${nuevoEstado.trim()}".`
   };
 }
 
 /**
- * MODIFICAR DETALLES DEL PEDIDO (FECHA, NOTAS, DIRECCIÓN O CHOFER)
+ * MODIFICAR DETALLES DEL PEDIDO
  */
 export async function updateOrderDetailsFromAgent({
   orderId,
@@ -192,7 +284,11 @@ export async function updateOrderDetailsFromAgent({
   }
 
   const updates = { updatedAt: Timestamp.now() };
-  if (fechaEntrega) updates.fechaEnvio = normalizeEcuadorDate(fechaEntrega);
+  if (fechaEntrega) {
+    const fNorm = normalizeEcuadorDate(fechaEntrega);
+    updates.fechaEnvio = fNorm;
+    updates.fechaEntrega = fNorm;
+  }
   if (horaEntrega) updates.horaEntrega = horaEntrega.trim();
   if (notas !== undefined) updates.notas = (notas || "").trim();
   if (direccionEntrega) updates.direccionEntrega = direccionEntrega.trim();
@@ -209,26 +305,44 @@ export async function updateOrderDetailsFromAgent({
 }
 
 /**
- * CONSULTAR EL DETALLE COMPLETO Y MINUCIOSO DE UN PEDIDO (Cero necesidad de ir al navegador)
+ * CONSULTAR EL DETALLE COMPLETO Y MINUCIOSO DE UN PEDIDO (P0-02 Fix)
  */
 export async function getOrderDetailFull({ orderId }) {
-  if (!orderId) throw new Error("Debes indicar el ID del pedido.");
+  if (!orderId || !String(orderId).trim()) {
+    return {
+      encontrado: false,
+      orderId: orderId || null,
+      mensaje: "Debes indicar un ID de pedido válido para realizar la consulta."
+    };
+  }
 
-  const orderRef = doc(db, "pedidos", orderId);
+  const cleanId = String(orderId).trim();
+  const orderRef = doc(db, "pedidos", cleanId);
   const snap = await getDoc(orderRef);
 
   if (!snap.exists()) {
-    // Intentar buscar por coincidencia parcial si se envió un ID corto
-    const listSnap = await getDocs(query(collection(db, "pedidos"), limit(100)));
+    // Intentar buscar por coincidencia parcial si se envió un ID corto o WooCommerce ID
+    const listSnap = await getDocs(query(collection(db, "pedidos"), limit(150)));
     let match = null;
     for (const d of listSnap.docs) {
-      if (d.id.startsWith(orderId) || d.id.includes(orderId)) {
-        match = { id: d.id, ...d.data() };
+      const data = d.data();
+      if (
+        d.id === cleanId ||
+        d.id.startsWith(cleanId) ||
+        d.id.includes(cleanId) ||
+        String(data.displayId || "").includes(cleanId) ||
+        String(data.wcOrderId || "").includes(cleanId)
+      ) {
+        match = { id: d.id, ...data };
         break;
       }
     }
     if (!match) {
-      throw new Error(`No se encontró ningún pedido con el ID o referencia "${orderId}".`);
+      return {
+        encontrado: false,
+        orderId: cleanId,
+        mensaje: `No se encontró ningún pedido con el ID o referencia "${cleanId}". Verifica el identificador en el CRM.`
+      };
     }
     return buildFullOrderReport(match);
   }
@@ -237,46 +351,70 @@ export async function getOrderDetailFull({ orderId }) {
 }
 
 async function buildFullOrderReport(p) {
-  // Traer historial real de abonos de la subcolección/colección
-  const abonosSnap = await getDocs(query(collection(db, "abonos"), where("pedidoId", "==", p.id)));
-  const listaAbonos = abonosSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  // Traer historial real de abonos de la colección abonos
+  let listaAbonos = [];
+  try {
+    const abonosSnap = await getDocs(query(collection(db, "abonos"), where("pedidoId", "==", p.id)));
+    listaAbonos = abonosSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch {
+    listaAbonos = [];
+  }
 
-  const total = parseFloat(p.total || p.coste || 0);
-  const pagado = listaAbonos.reduce((s, a) => s + (parseFloat(a.monto || 0)), 0) || parseFloat(p.pagado || p.abono || 0);
+  const total = parseFloat(p.total !== undefined && p.total !== null ? p.total : (p.coste || 0));
+  const sumaAbonosColeccion = listaAbonos.reduce((s, a) => s + (parseFloat(a.monto || 0)), 0);
+  const pagadoDirecto = parseFloat(p.pagado !== undefined && p.pagado !== null ? p.pagado : (p.abono || 0));
+  const pagado = sumaAbonosColeccion > 0 ? sumaAbonosColeccion : pagadoDirecto;
   const saldo = Math.max(0, total - pagado);
 
-  const items = (p.items || p.cart || []).map(it => ({
+  const telefonoResuelto = await resolverTelefonoCliente(p);
+  const fechaRepresentativa = resolveFechaPedido(p) || normalizeEcuadorDate(p.createdAt);
+  const infoDiseno = extraerDiseno(p);
+
+  const rawItems = p.items || p.cart || [];
+  const items = rawItems.map(it => ({
     nombre: it.nombre || it.name || "Producto",
     cantidad: it.cantidad || 1,
-    tamano: it.tamano || it.porcion || "No especificado",
-    sabor: it.sabor || "Estándar",
-    relleno: it.relleno || "Estándar",
-    precioUnitario: parseFloat(it.precio || it.precioUnitario || 0).toFixed(2),
-    especificaciones: it.especificaciones || it.nota || "Ninguna"
+    tamano: it.tamano || it.porcion || "Estándar",
+    sabor: it.sabor || it.detalles?.Sabor || "Estándar",
+    relleno: it.relleno || it.detalles?.Relleno || "Estándar",
+    precioUnitario: parseFloat(it.precioUnitario || it.precio || 0).toFixed(2),
+    precioTotal: (parseFloat(it.precio || (parseFloat(it.precioUnitario || 0) * (it.cantidad || 1)))).toFixed(2),
+    especificaciones: it.especificaciones || it.nota || it.observaciones || "Ninguna",
+    imagenesAdjuntas: Array.isArray(it.imagenes) ? it.imagenes : [],
+    pautaConfirmada: it.pautaDiseno?.textoConfirmado?.fraseExacta || null
   }));
+
+  const advertenciaBorradorCobrado = (normalizeEstado(p.estado) === "borrador" && (saldo <= 0.05 || pagado > 0))
+    ? `⚠️ Pedido en estado Borrador pero con pago registrado ($${pagado.toFixed(2)}). Requiere confirmación administrativa de producción.`
+    : null;
 
   return {
     encontrado: true,
     pedidoId: p.id,
     displayId: p.displayId || p.id.slice(-6),
+    wcOrderId: p.wcOrderId || null,
+    advertencia: advertenciaBorradorCobrado,
     enlaces: {
-      crmVentas: `https://crm.charbelapasteleria.com/ventas?orderId=${p.id}`,
-      portalCliente: `https://crm.charbelapasteleria.com/c/${p.id}`,
-      obradorProduccion: `https://crm.charbelapasteleria.com/produccion?orderId=${p.id}`
+      crmVentas: `${CRM_BASE_URL}/ventas?orderId=${p.id}`,
+      portalCliente: `${CRM_BASE_URL}/c/${p.id}`,
+      obradorProduccion: `${CRM_BASE_URL}/produccion?orderId=${p.id}`
     },
     cliente: {
       nombre: p.clienteNombre || "Sin nombre",
-      telefono: p.clienteTelefono || "Sin teléfono registrado",
-      direccion: p.direccionEntrega || "Retiro en local"
+      telefono: telefonoResuelto,
+      direccion: p.direccionEntrega || "Retiro en Obrador",
+      email: p.clienteEmail || null
     },
     entrega: {
-      fecha: toDateStr(p.fechaEnvio || p.createdAt),
+      fecha: fechaRepresentativa,
       hora: p.horaEntrega || p.hora || "No especificada",
       metodo: p.metodoEntrega || (p.costoDelivery > 0 ? "Entrega a Domicilio" : "Retiro en Obrador"),
       chofer: p.choferNombre || "No asignado",
-      estado: p.estado || "pendiente"
+      estado: p.estado || "Borrador"
     },
+    diseno: infoDiseno,
     productos: items,
+    totalLineasProductos: items.length,
     finanzas: {
       total: total.toFixed(2),
       pagado: pagado.toFixed(2),
@@ -289,7 +427,8 @@ async function buildFullOrderReport(p) {
         nota: a.nota || ""
       }))
     },
-    notasEspeciales: p.notas || "Sin notas adicionales",
+    notasEspeciales: p.notas || p.notes || "Sin notas adicionales",
+    tematica: p.tematica || null,
     facturacionSRI: p.facturacion ? {
       numeroFactura: p.facturacion.numeroFactura || "No emitido",
       estado: p.facturacion.estado || "PENDIENTE",
@@ -299,49 +438,85 @@ async function buildFullOrderReport(p) {
 }
 
 /**
- * BÚSQUEDA GENERAL DE PEDIDOS CON RETORNO DETALLADO EN TEXTO
+ * BÚSQUEDA GENERAL DE PEDIDOS CON RETORNO DETALLADO EN TEXTO (P1-01, P2-01, P2-02)
  */
-export async function searchOrdersDetailed({ queryText, estado, fecha, maxResultados = 10 } = {}) {
-  const snap = await getDocs(query(collection(db, "pedidos"), orderBy("fechaEnvio", "desc"), limit(120)));
+export async function searchOrdersDetailed({ queryText, estado, fecha, soloSinDiseno = false, maxResultados = 20 } = {}) {
+  const snap = await getDocs(collection(db, "pedidos"));
   const term = (queryText || "").toLowerCase().trim();
+  const filtroFecha = fecha ? normalizeEcuadorDate(fecha) : null;
   const resultados = [];
 
-  for (const doc of snap.docs) {
-    const p = { id: doc.id, ...doc.data() };
-    const fStr = normalizeEcuadorDate(p.fechaEnvio || p.createdAt);
+  // Mapear todos los pedidos
+  const todosPedidos = [];
+  snap.forEach(docSnap => {
+    todosPedidos.push({ id: docSnap.id, ...docSnap.data() });
+  });
 
-    if (fecha && fStr !== fecha) continue;
-    if (estado && (p.estado || "").toLowerCase() !== estado.toLowerCase()) continue;
+  // Ordenar descendente por fecha representativa
+  todosPedidos.sort((a, b) => {
+    const fA = resolveFechaPedido(a);
+    const fB = resolveFechaPedido(b);
+    return fB.localeCompare(fA);
+  });
+
+  for (const p of todosPedidos) {
+    const fStr = resolveFechaPedido(p);
+
+    if (filtroFecha && fStr !== filtroFecha) continue;
+
+    // Normalización tolerante de estado (incluyendo "producción" -> esProduccionActiva)
+    if (estado && !coincideEstado(p, estado)) {
+      continue;
+    }
+
+    const infoDiseno = extraerDiseno(p);
+
+    // Filtro P2-01: solo pedidos sin diseño definido
+    if (soloSinDiseno) {
+      if (infoDiseno.definido && infoDiseno.tieneAdjunto) {
+        continue;
+      }
+    }
 
     if (term) {
       const nom = (p.clienteNombre || "").toLowerCase();
       const tel = (p.clienteTelefono || "").toLowerCase();
       const idMatch = p.id.toLowerCase().includes(term);
       const notas = (p.notas || "").toLowerCase();
+      const tematica = (p.tematica || "").toLowerCase();
       const itemsMatch = (p.items || p.cart || []).some(i => (i.nombre || i.name || "").toLowerCase().includes(term));
 
-      if (!nom.includes(term) && !tel.includes(term) && !idMatch && !notas.includes(term) && !itemsMatch) {
+      if (!nom.includes(term) && !tel.includes(term) && !idMatch && !notas.includes(term) && !tematica.includes(term) && !itemsMatch) {
         continue;
       }
     }
 
-    const total = parseFloat(p.total || p.coste || 0);
-    const pagado = parseFloat(p.pagado || p.abono || 0);
-    const saldo = Math.max(0, total - pagado);
+    const total = parseFloat(p.total !== undefined && p.total !== null ? p.total : (p.coste || 0));
+    const pagado = parseFloat(p.pagado !== undefined && p.pagado !== null ? p.pagado : (p.abono || 0));
+    const saldo = p.saldoPendiente !== undefined ? parseFloat(p.saldoPendiente) : Math.max(0, total - pagado);
+
+    // Resolver teléfono si está ausente en el documento de pedido
+    let telefono = p.clienteTelefono || "";
+    if (!telefono || telefono === "Sin teléfono") {
+      telefono = await resolverTelefonoCliente(p);
+    }
 
     resultados.push({
       orderId: p.id,
+      displayId: p.displayId || p.id.slice(-6),
       cliente: p.clienteNombre || "Cliente",
-      telefono: p.clienteTelefono || "Sin teléfono",
+      telefono,
       fechaEntrega: fStr,
       horaEntrega: p.horaEntrega || p.hora || "No especificada",
-      estado: p.estado || "pendiente",
+      estado: p.estado || "Borrador",
       total: total.toFixed(2),
       saldoPendiente: saldo.toFixed(2),
-      enlaceCrm: `https://crm.charbelapasteleria.com/ventas?orderId=${p.id}`,
-      enlaceCliente: `https://crm.charbelapasteleria.com/c/${p.id}`,
+      diseno: infoDiseno,
+      enlaceCrm: `${CRM_BASE_URL}/ventas?orderId=${p.id}`,
+      enlaceCliente: `${CRM_BASE_URL}/c/${p.id}`,
       productosResumen: (p.items || p.cart || []).map(i => `${i.cantidad || 1}x ${i.nombre || i.name || "Item"}`).join(", "),
-      notas: p.notas || ""
+      notas: p.notas || p.notes || "",
+      tematica: p.tematica || null
     });
 
     if (resultados.length >= maxResultados) break;
@@ -354,11 +529,20 @@ export async function searchOrdersDetailed({ queryText, estado, fecha, maxResult
 }
 
 /**
- * CONSULTA DE AGENDA DEL OBRADOR EN TEXTO ESTRUCTURADO (PRODUCCIÓN REAL)
+ * CONSULTA DE AGENDA DEL OBRADOR EN TEXTO ESTRUCTURADO (P0-01 Fix)
  */
 export async function getObradorAgendaFull({ fecha } = {}) {
   const targetDate = fecha ? normalizeEcuadorDate(fecha) : getEcuadorToday();
-  const snap = await getDocs(query(collection(db, "pedidos"), orderBy("fechaEnvio", "asc"), limit(150)));
+
+  // Consultar en paralelo pedidos con fechaEnvio o fechaEntrega igual a la fecha objetivo
+  const [snapEnvio, snapEntrega] = await Promise.all([
+    getDocs(query(collection(db, "pedidos"), where("fechaEnvio", "==", targetDate))),
+    getDocs(query(collection(db, "pedidos"), where("fechaEntrega", "==", targetDate)))
+  ]);
+
+  const mapPedidos = new Map();
+  snapEnvio.forEach(d => mapPedidos.set(d.id, { id: d.id, ...d.data() }));
+  snapEntrega.forEach(d => mapPedidos.set(d.id, { id: d.id, ...d.data() }));
 
   const pedidosDia = [];
   const resumenSabores = {};
@@ -369,44 +553,65 @@ export async function getObradorAgendaFull({ fecha } = {}) {
     entregados: []
   };
 
-  for (const doc of snap.docs) {
-    const p = { id: doc.id, ...doc.data() };
-    const fStr = normalizeEcuadorDate(p.fechaEnvio || p.createdAt);
-
-    if (fStr === targetDate) {
-      const items = (p.items || p.cart || []).map(i => {
-        const sabor = i.sabor || "General";
-        resumenSabores[sabor] = (resumenSabores[sabor] || 0) + (parseInt(i.cantidad || 1, 10));
-        return {
-          nombre: i.nombre || i.name || "Torta",
-          cantidad: i.cantidad || 1,
-          tamano: i.tamano || i.porcion || "",
-          sabor: i.sabor || "",
-          relleno: i.relleno || "",
-          especificaciones: i.especificaciones || i.nota || ""
-        };
-      });
-
-      const entry = {
-        orderId: p.id,
-        cliente: p.clienteNombre || "Cliente",
-        hora: p.horaEntrega || p.hora || "Sin hora",
-        estado: p.estado || "pendiente",
-        metodoEntrega: p.metodoEntrega || (p.costoDelivery > 0 ? "Envío con Chofer" : "Retiro"),
-        direccion: p.direccionEntrega || "",
-        items,
-        notas: p.notas || ""
-      };
-
-      pedidosDia.push(entry);
-
-      const st = (p.estado || "pendiente").toLowerCase();
-      if (st.includes("listo")) porEstado.listo_para_entrega.push(entry);
-      else if (st.includes("entreg")) porEstado.entregados.push(entry);
-      else if (st.includes("decor")) porEstado.en_decoracion.push(entry);
-      else porEstado.por_hornear.push(entry);
+  for (const [id, p] of mapPedidos.entries()) {
+    // Excluir cancelados y archivados
+    const stNorm = normalizeEstado(p.estado);
+    if (stNorm === "cancelado" || stNorm === "cancelada" || stNorm === "archivado" || stNorm === "anulado") {
+      continue;
     }
+
+    const items = (p.items || p.cart || []).map(i => {
+      const sabor = i.sabor || i.detalles?.Sabor || "General";
+      resumenSabores[sabor] = (resumenSabores[sabor] || 0) + (parseInt(i.cantidad || 1, 10));
+      return {
+        nombre: i.nombre || i.name || "Torta",
+        cantidad: i.cantidad || 1,
+        tamano: i.tamano || i.porcion || "Estándar",
+        sabor,
+        relleno: i.relleno || i.detalles?.Relleno || "",
+        especificaciones: i.especificaciones || i.nota || i.observaciones || "",
+        pautaConfirmada: i.pautaDiseno?.textoConfirmado?.fraseExacta || null
+      };
+    });
+
+    const infoDiseno = extraerDiseno(p);
+    const telefono = await resolverTelefonoCliente(p);
+
+    const pagado = parseFloat(p.pagado !== undefined && p.pagado !== null ? p.pagado : (p.abono || 0));
+    const total = parseFloat(p.total !== undefined && p.total !== null ? p.total : (p.coste || 0));
+    const saldo = p.saldoPendiente !== undefined ? parseFloat(p.saldoPendiente) : Math.max(0, total - pagado);
+
+    const advertenciaBorrador = (stNorm === "borrador" && (saldo <= 0.05 || pagado > 0))
+      ? `⚠️ Pedido en estado Borrador pero con pago registrado ($${pagado.toFixed(2)}). Requiere confirmación administrativa de producción.`
+      : null;
+
+    const entry = {
+      orderId: p.id,
+      displayId: p.displayId || p.id.slice(-6),
+      cliente: p.clienteNombre || "Cliente",
+      telefono,
+      hora: p.horaEntrega || p.hora || "Sin hora",
+      estado: p.estado || "Aprobada",
+      advertencia: advertenciaBorrador,
+      metodoEntrega: p.metodoEntrega || (p.costoDelivery > 0 ? "Envío con Chofer" : "Retiro en Obrador"),
+      direccion: p.direccionEntrega || "",
+      items,
+      totalItems: items.length,
+      notas: p.notas || p.notes || "",
+      tematica: p.tematica || null,
+      diseno: infoDiseno
+    };
+
+    pedidosDia.push(entry);
+
+    if (stNorm.includes("listo")) porEstado.listo_para_entrega.push(entry);
+    else if (stNorm.includes("entreg")) porEstado.entregados.push(entry);
+    else if (stNorm.includes("decor")) porEstado.en_decoracion.push(entry);
+    else porEstado.por_hornear.push(entry);
   }
+
+  // Ordenar por hora de entrega
+  pedidosDia.sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
 
   return {
     fecha: targetDate,
@@ -418,6 +623,7 @@ export async function getObradorAgendaFull({ fecha } = {}) {
       entregados: porEstado.entregados.length
     },
     consolidadoSabores: resumenSabores,
+    pedidos: pedidosDia,
     detallePorEtapa: porEstado
   };
 }
@@ -431,7 +637,6 @@ export async function upsertClientFromAgent({ nombre, telefono, email = "", dire
   const cleanName = nombre.trim();
   const cleanTel = (telefono || "").trim();
 
-  // Buscar si ya existe
   const snap = await getDocs(query(collection(db, "clientes"), limit(100)));
   let existingId = null;
 

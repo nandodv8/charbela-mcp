@@ -375,8 +375,9 @@ export function createCharbelaMcpServer() {
     "Busca pedidos filtrando por cliente, producto, estado o fecha con desglose de montos y saldos en texto.",
     {
       queryText: z.string().optional().describe("Nombre de cliente, teléfono, producto o palabra clave"),
-      estado: z.string().optional().describe("Filtrar por estado del pedido (ej. 'pendiente', 'confirmado', 'listo', 'entregado')"),
+      estado: z.string().optional().describe("Filtrar por estado del pedido (ej. 'pendiente', 'confirmado', 'aprobada', 'produccion', 'enviada', 'listo', 'entregado')"),
       fecha: z.string().optional().describe("Filtrar por fecha específica de entrega en formato YYYY-MM-DD"),
+      soloSinDiseno: z.boolean().optional().describe("Si es true, filtra pedidos de productos decorados o cotizaciones que aún no tienen diseño definido ni imagen de referencia."),
       maxResultados: z.number().default(10).describe("Límite máximo de pedidos a retornar")
     },
     async (args) => runWithTelemetry("buscar_pedidos", args, () => searchOrdersDetailed(args))
@@ -549,8 +550,9 @@ export function createCharbelaMcpServer() {
 
   server.tool(
     "consultar_cartera_por_cobrar",
-    "Consulta todos los pedidos activos o entregados que mantienen saldo pendiente por cobrar, con cliente, teléfono y fecha de entrega.",
+    "Consulta cartera y cuentas por cobrar (CxC) de clientes con saldo pendiente, con cliente, teléfono y fecha de entrega. Por defecto aplica alcance 'vigente' conciliado con el reporte financiero P&L.",
     {
+      alcance: z.enum(["vigente", "mes", "historico", "todo"]).default("vigente").optional().describe("Alcance de la consulta: 'vigente' (pedidos activos desde junio 2026), 'mes' (mes en curso, conciliado con CxC de finanzas por $497.45), o 'historico' (toda la base histórica)."),
       limite: z.number().optional().describe("Máximo de pedidos a listar")
     },
     async (args) => runWithTelemetry("consultar_cartera_por_cobrar", args, () => getCarteraPorCobrar(args))
