@@ -17,8 +17,9 @@ export function clasificarItemObrador(item, descripcionCompleta = "") {
 
   // 1.2 Bocaditos Decorados (bocaditos con decoración especial o religiosos)
   if (
-    (desc.includes("bocadito") || desc.includes("bocaditos") || cat.includes("bocadito")) &&
-    (desc.includes("decorad") || desc.includes("religios") || desc.includes("cruz") || desc.includes("paloma") || desc.includes("angel") || subcat.includes("decorad"))
+    (desc.includes("bocadito") || desc.includes("bocaditos") || cat.includes("bocadito") || desc.includes("alfajor") || desc.includes("brownie") || desc.includes("brigadeiro") || desc.includes("mana") || desc.includes("maná")) &&
+    (desc.includes("decorad") || desc.includes("religios") || desc.includes("cruz") || desc.includes("paloma") || desc.includes("angel") || desc.includes("glasead") || subcat.includes("decorad")) &&
+    !desc.includes("cupcake") && !desc.includes("torta") && !desc.includes("cake")
   ) {
     return "1.2_bocaditos_decorados";
   }

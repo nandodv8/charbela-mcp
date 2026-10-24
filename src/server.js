@@ -7,7 +7,7 @@ import { URL } from "node:url";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createCharbelaMcpServer } from "./createMcpServer.js";
-import { firebaseConfig } from "./firebase.js";
+import { firebaseConfig, mcpAuthReady } from "./firebase.js";
 import {
   RESOURCE_URL,
   getOAuthClientId,
@@ -91,6 +91,7 @@ const serverInstance = http.createServer(async (req, res) => {
   // 1. DIAGNÓSTICO Y HEALTH CHECK
   // =========================================================================
   if (pathname === "/health") {
+    const firestoreAuthenticated = await mcpAuthReady;
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(
       JSON.stringify({
@@ -99,6 +100,10 @@ const serverInstance = http.createServer(async (req, res) => {
         version: "2.1.0",
         uptimeSeconds: Math.floor(process.uptime()),
         activeSessions: Object.keys(transports).length,
+        firestoreAuthenticated,
+        firestoreAuthNote: firestoreAuthenticated
+          ? "Autenticado — las herramientas de escritura pueden guardar en Firestore."
+          : "SIN autenticar — las herramientas de escritura van a fallar con PERMISSION_DENIED. Configura MCP_FIREBASE_EMAIL / MCP_FIREBASE_PASSWORD.",
         timestamp: new Date().toISOString()
       })
     );

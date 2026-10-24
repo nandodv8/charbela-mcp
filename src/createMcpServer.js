@@ -89,6 +89,17 @@ import {
   adjuntarCapturaMejoraBug
 } from "./services/feedbackMejorasService.js";
 
+import {
+  PRODUCTION_SECTIONS,
+  listParents,
+  getParentWithVariations,
+  createParent,
+  updateParent,
+  createVariation,
+  updatePrice,
+  auditMissingSection
+} from "./services/catalogAgentService.js";
+
 /**
  * Envoltorio con telemetría integrada y manejo de errores
  */
@@ -749,6 +760,104 @@ export function createCharbelaMcpServer() {
         ]
       };
     }
+  );
+
+  // ============================================================================
+  // 14. GESTIÓN DE CATÁLOGO (PRODUCTOS PADRE Y VARIACIONES — padres_v2/productos_v2)
+  // ============================================================================
+  // Nunca exponer borrado directo ni reclasificación masiva por filtro aquí:
+  // cada operación actúa sobre UN productoId/variacionId explícito, para no
+  // reabrir por el chat el mismo bug de clasificación por adivinanza que
+  // estas herramientas existen para cerrar (ver sesión del 2026-10-24).
+
+  const seccionProduccionDescripcion =
+    "Sección del Plan de Producción Semanal donde se prepara este producto. Opciones: " +
+    PRODUCTION_SECTIONS.map(s => `${s.id} (${s.label})`).join(", ") +
+    ". Obligatorio: sin esto, el producto se pierde o se clasifica mal en el obrador.";
+
+  server.tool(
+    "catalogo_listar_productos",
+    "Lista los productos padre (familias) del Catálogo Maestro, con filtros opcionales por categoría, sección de producción, o solo los que no tienen sección asignada.",
+    {
+      categoria: z.string().optional().describe("Filtrar por categoría exacta (ej. 'Bocaditos Dulces')"),
+      seccionProduccion: z.string().optional().describe("Filtrar por sección de producción exacta"),
+      soloSinSeccion: z.boolean().optional().describe("Si es true, lista solo productos sin seccionProduccion asignada (para auditar el catálogo)")
+    },
+    async (args) => runWithTelemetry("catalogo_listar_productos", args, () => listParents(args))
+  );
+
+  server.tool(
+    "catalogo_consultar_producto",
+    "Consulta el detalle completo de un producto padre del catálogo, incluyendo todas sus variaciones/presentaciones y precios.",
+    {
+      productoId: z.string().describe("ID del producto padre en Firestore (colección padres_v2)")
+    },
+    async ({ productoId }) => runWithTelemetry("catalogo_consultar_producto", { productoId }, () => getParentWithVariations(productoId))
+  );
+
+  server.tool(
+    "catalogo_crear_producto",
+    "Crea un producto padre (familia) nuevo en el Catálogo Maestro. Antes de crear, verifica por nombre que no exista ya uno muy similar.",
+    {
+      nombreBase: z.string().describe("Nombre del producto (ej. 'Torta Red Velvet')"),
+      categoriaBase: z.string().optional().describe("Categoría del catálogo (ej. 'Tortas y Mini Cakes')"),
+      seccionProduccion: z.enum(PRODUCTION_SECTIONS.map(s => s.id)).describe(seccionProduccionDescripcion),
+      tipoVenta: z.string().optional().describe("Modalidad de venta (ej. 'por_unidad', 'por_bandeja', 'por_docena')"),
+      minQuantity: z.number().optional().describe("Cantidad mínima de compra"),
+      descripcionBase: z.string().optional().describe("Descripción del producto para catálogo"),
+      saboresDisponibles: z.array(z.object({
+        id: z.string(),
+        label: z.string()
+      })).optional().describe("Set de sabores propio de este producto, si no calza con las familias oficiales (torta, cupcake, cakepop, macaron, brownie). Si se omite, el producto hereda el set de sabores por palabra clave del nombre.")
+    },
+    async (args) => runWithTelemetry("catalogo_crear_producto", args, () => createParent(args))
+  );
+
+  server.tool(
+    "catalogo_actualizar_producto",
+    "Edita campos de un producto padre existente del catálogo: categoría, sección de producción, sabores propios, descripción o cantidad mínima. No borra ni recrea el producto.",
+    {
+      productoId: z.string().describe("ID del producto padre a editar"),
+      cambios: z.object({
+        categoriaBase: z.string().optional(),
+        seccionProduccion: z.enum(PRODUCTION_SECTIONS.map(s => s.id)).optional().describe(seccionProduccionDescripcion),
+        saboresDisponibles: z.array(z.object({ id: z.string(), label: z.string() })).optional(),
+        descripcionBase: z.string().optional(),
+        min_quantity: z.number().optional()
+      }).describe("Campos a actualizar; se omiten los que no cambian")
+    },
+    async ({ productoId, cambios }) => runWithTelemetry("catalogo_actualizar_producto", { productoId, cambios }, () => updateParent(productoId, cambios))
+  );
+
+  server.tool(
+    "catalogo_crear_variacion",
+    "Crea una presentación/variación nueva bajo un producto padre existente (ej. un sabor o tamaño específico con su propio precio). Hereda automáticamente la sección de producción del padre.",
+    {
+      parentId: z.string().describe("ID del producto padre al que pertenece esta variación"),
+      nombre: z.string().describe("Nombre de la variación (ej. 'Torta Red Velvet - 20 porciones')"),
+      precio: z.number().describe("Precio de venta en dólares"),
+      costoProduccion: z.number().optional().describe("Costo de producción estimado en dólares")
+    },
+    async (args) => runWithTelemetry("catalogo_crear_variacion", args, () => createVariation(args))
+  );
+
+  server.tool(
+    "catalogo_actualizar_precio",
+    "Actualiza solo el precio, precio normal (tachado) o costo de producción de una variación existente del catálogo. No toca nombre, categoría ni sección.",
+    {
+      variacionId: z.string().describe("ID de la variación en Firestore (colección productos_v2)"),
+      precio: z.number().optional().describe("Nuevo precio de venta"),
+      precioNormal: z.number().optional().describe("Precio normal / tachado, si aplica descuento"),
+      costoProduccion: z.number().optional().describe("Nuevo costo de producción estimado")
+    },
+    async ({ variacionId, ...cambios }) => runWithTelemetry("catalogo_actualizar_precio", { variacionId, ...cambios }, () => updatePrice(variacionId, cambios))
+  );
+
+  server.tool(
+    "catalogo_detectar_sin_seccion",
+    "Audita el catálogo completo y lista los productos padre que todavía no tienen una Sección del Plan de Producción asignada — los que hoy se pierden o se clasifican mal en el obrador. Solo lectura.",
+    {},
+    async () => runWithTelemetry("catalogo_detectar_sin_seccion", {}, () => auditMissingSection())
   );
 
   return server;
